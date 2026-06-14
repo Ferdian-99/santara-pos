@@ -40,30 +40,53 @@ The app currently has:
 
 ## Important Current Limitation
 
-* Data is still local state / not persistent enough for real use.
-* Refreshing or reopening the app may lose some data unless local persistence has been implemented.
-* There is no Supabase/database yet.
+* Data is still localStorage-first and browser-local, so it is not ready as a multi-device production database.
+* Supabase schema preparation exists, but the app does not sync operational data to Supabase yet.
 * There is no Google Sheets sync yet.
-* There is no full report page yet.
 * There is no legacy import yet.
+
+## Phase 5A Supabase Preparation
+
+What exists:
+
+* `@supabase/supabase-js` dependency is installed.
+* `.env.example` documents the required Supabase environment variables.
+* `src/lib/supabase.ts` creates a safe Supabase client only when env variables exist.
+* `supabase/migrations/20260614000100_santara_pos_schema.sql` prepares tables for profiles, menu categories, menu items, transactions, transaction items, pending orders, pending order items, and app settings.
+* RLS is enabled in the migration with simple authenticated-user policies for planning/testing.
+* `SUPABASE_SETUP.md` explains setup steps for beginners.
+
+What is still not implemented:
+
+* The app has not replaced localStorage persistence yet.
+* No Supabase data service or sync flow exists yet.
+* No login/auth UI exists yet.
+* No production role-based RLS policy has been finalized yet.
+* No Google Sheets sync, legacy import, expenses, shift closing, or Excel export exists yet.
+
+Next phase should be:
+
+Phase 5B - Supabase Data Service and Sync
+
+Goal:
+
+* Add a safe data service layer.
+* Decide localStorage-to-Supabase migration behavior.
+* Sync menu edits, pending orders, receipt history, and receipt numbering.
+* Keep local backup safety while Supabase is introduced.
 
 ## Next Recommended Phase
 
 The next phase should be:
 
-Phase 3.5 - Local Persistence and Backup Safety
+Phase 5B - Supabase Data Service and Sync
 
 Goal:
 
-* Persist menu edits
-* Persist HPP edits
-* Persist active/inactive menu status
-* Persist pending orders
-* Persist completed transactions / receipt history
-* Persist receipt numbering
-* Add Export Backup JSON
-* Add Import Backup JSON
-* Add Reset Local Data with custom confirmation modal
+* Add a Supabase data service layer.
+* Keep localStorage fallback safe while Supabase is introduced.
+* Sync menu edits, HPP edits, active/inactive menu status, pending orders, completed transactions, receipt history, and receipt numbering.
+* Plan careful migration from local browser data to Supabase data.
 
 ## Future Roadmap
 
