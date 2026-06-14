@@ -1,5 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { CompletedTransaction, LegacySale } from '../types';
+import { DailyClosing } from './DailyClosing';
+import { GoogleSheetSync } from './GoogleSheetSync';
+import type {
+  CompletedTransaction,
+  DailyClosing as DailyClosingData,
+  Expense,
+  GoogleSheetSyncLog,
+  GoogleSheetSyncSettings,
+  LegacySale,
+} from '../types';
 import { formatRupiah } from '../utils/format';
 import { exportReportCsv, exportReportJson } from '../utils/reportExport';
 import {
@@ -12,6 +21,14 @@ import {
 type ReportsProps = {
   transactions: CompletedTransaction[];
   legacySales: LegacySale[];
+  expenses: Expense[];
+  dailyClosings: DailyClosingData[];
+  googleSheetSyncSettings: GoogleSheetSyncSettings;
+  googleSheetSyncLogs: GoogleSheetSyncLog[];
+  currentUserName: string;
+  onSaveClosing: (closing: DailyClosingData) => void;
+  onSaveGoogleSheetSettings: (settings: GoogleSheetSyncSettings) => void;
+  onAddGoogleSheetSyncLog: (log: GoogleSheetSyncLog) => void;
 };
 
 const reportModes: { label: string; value: ReportMode }[] = [
@@ -21,14 +38,36 @@ const reportModes: { label: string; value: ReportMode }[] = [
   { label: 'Semua Waktu', value: 'all' },
 ];
 
-export function Reports({ legacySales, transactions }: ReportsProps) {
+export function Reports({
+  currentUserName,
+  dailyClosings,
+  expenses,
+  googleSheetSyncLogs,
+  googleSheetSyncSettings,
+  legacySales,
+  onAddGoogleSheetSyncLog,
+  onSaveClosing,
+  onSaveGoogleSheetSettings,
+  transactions,
+}: ReportsProps) {
   const [reportMode, setReportMode] = useState<ReportMode>('today');
   const [selectedDate, setSelectedDate] = useState(getTodayInputValue);
   const report = useMemo(
-    () => buildSalesReport(transactions, reportMode, selectedDate, legacySales),
-    [legacySales, reportMode, selectedDate, transactions],
+    () =>
+      buildSalesReport(
+        transactions,
+        reportMode,
+        selectedDate,
+        legacySales,
+        expenses,
+        dailyClosings,
+      ),
+    [dailyClosings, expenses, legacySales, reportMode, selectedDate, transactions],
   );
-  const hasTransactions = report.totalTransactions > 0;
+  const hasReportData = report.totalTransactions > 0 || report.expenses.length > 0;
+  const closingDate =
+    reportMode === 'today' ? getTodayInputValue() : reportMode === 'date' ? selectedDate : '';
+  const canUseDailyClosing = reportMode === 'today' || reportMode === 'date';
   const exportContext = {
     report,
     reportMode,
@@ -84,13 +123,13 @@ export function Reports({ legacySales, transactions }: ReportsProps) {
 
           <div className="grid gap-2 sm:grid-cols-[1fr_140px_140px] sm:items-center">
             <p className="text-xs font-bold text-santara-roast/60">
-              {hasTransactions
+              {hasReportData
                 ? 'Download laporan sesuai filter aktif.'
                 : 'Tidak ada data laporan'}
             </p>
             <button
               className="rounded-lg bg-santara-bean px-3 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-santara-roast disabled:cursor-not-allowed disabled:opacity-45"
-              disabled={!hasTransactions}
+              disabled={!hasReportData}
               onClick={() => exportReportCsv(exportContext)}
               type="button"
             >
@@ -98,7 +137,7 @@ export function Reports({ legacySales, transactions }: ReportsProps) {
             </button>
             <button
               className="rounded-lg bg-white px-3 py-2.5 text-xs font-black text-santara-bean ring-1 ring-santara-latte transition hover:bg-santara-cream disabled:cursor-not-allowed disabled:opacity-45"
-              disabled={!hasTransactions}
+              disabled={!hasReportData}
               onClick={() => exportReportJson(exportContext)}
               type="button"
             >
@@ -109,7 +148,7 @@ export function Reports({ legacySales, transactions }: ReportsProps) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pt-3">
-        {!hasTransactions ? (
+        {!hasReportData ? (
           <EmptyReportState />
         ) : (
           <div className="space-y-3">
@@ -142,6 +181,18 @@ export function Reports({ legacySales, transactions }: ReportsProps) {
               <ReportCard
                 label="Rata-rata Transaksi"
                 value={formatRupiah(report.averageTransactionValue)}
+              />
+              <ReportCard
+                label="Total Pengeluaran"
+                value={formatRupiah(report.totalExpenses)}
+              />
+              <ReportCard
+                label="Laba Bersih"
+                value={formatRupiah(report.netProfit)}
+              />
+              <ReportCard
+                label="Net Margin"
+                value={formatPercent(report.netMargin)}
               />
             </section>
 
@@ -190,6 +241,24 @@ export function Reports({ legacySales, transactions }: ReportsProps) {
                   </div>
                 </Panel>
 
+                <Panel title="Ringkasan Pengeluaran">
+                  {report.expenseSummary.length === 0 ? (
+                    <p className="text-sm font-bold text-santara-roast/55">
+                      Belum ada pengeluaran di periode ini.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {report.expenseSummary.map((summary) => (
+                        <SummaryLine
+                          key={summary.category}
+                          label={summary.category}
+                          value={formatRupiah(summary.total)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </Panel>
+
                 <Panel title="Best Seller">
                   {report.bestSellers.length === 0 ? (
                     <p className="text-sm font-bold text-santara-roast/55">
@@ -219,10 +288,76 @@ export function Reports({ legacySales, transactions }: ReportsProps) {
                 )}
               </Panel>
             </section>
+
+            <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
+              <Panel title="Daftar Pengeluaran">
+                {report.expenses.length === 0 ? (
+                  <p className="text-sm font-bold text-santara-roast/55">
+                    Belum ada pengeluaran di periode ini.
+                  </p>
+                ) : (
+                  <ExpenseTable expenses={report.expenses} />
+                )}
+              </Panel>
+
+              <GoogleSheetSync
+                currentUserName={currentUserName}
+                logs={googleSheetSyncLogs}
+                onAddLog={onAddGoogleSheetSyncLog}
+                onSaveSettings={onSaveGoogleSheetSettings}
+                report={report}
+                reportMode={reportMode}
+                selectedDate={selectedDate}
+                settings={googleSheetSyncSettings}
+              />
+            </section>
+
+            {canUseDailyClosing && (
+              <DailyClosing
+                cashierName={currentUserName}
+                key={report.dailyClosing?.id ?? closingDate}
+                onSaveClosing={onSaveClosing}
+                report={report}
+                selectedDate={closingDate}
+              />
+            )}
           </div>
         )}
       </div>
     </section>
+  );
+}
+
+type ExpenseTableProps = {
+  expenses: Expense[];
+};
+
+function ExpenseTable({ expenses }: ExpenseTableProps) {
+  return (
+    <div className="overflow-x-auto rounded-lg ring-1 ring-santara-latte">
+      <table className="w-full min-w-[720px] border-collapse bg-white text-left text-sm">
+        <thead className="bg-santara-cream text-[10px] font-black uppercase tracking-[0.08em] text-santara-sage">
+          <tr>
+            <TableHeader>Tanggal</TableHeader>
+            <TableHeader>Nama</TableHeader>
+            <TableHeader>Kategori</TableHeader>
+            <TableHeader>Metode</TableHeader>
+            <TableHeader align="right">Nominal</TableHeader>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-santara-latte">
+          {expenses.map((expense) => (
+            <tr className="transition hover:bg-santara-cream/55" key={expense.id}>
+              <TableCell>{expense.date}</TableCell>
+              <TableCell strong>{expense.name}</TableCell>
+              <TableCell>{expense.category}</TableCell>
+              <TableCell>{expense.paymentMethod}</TableCell>
+              <TableCell align="right">{formatRupiah(expense.amount)}</TableCell>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

@@ -49,12 +49,18 @@ Open Supabase SQL Editor and run these files in order:
 2. `supabase/migrations/20260614000200_santara_pos_phase5b_sync_policies.sql`
 3. `supabase/migrations/20260614000300_santara_pos_auth_policies.sql`
 4. `supabase/migrations/20260614000400_santara_pos_legacy_sales.sql`
+5. `supabase/migrations/20260614000500_santara_pos_expenses_closing.sql`
 
 The Phase 5C migration removes the temporary anon sync policies and replaces
 them with authenticated owner/admin/cashier policies.
 
 The Phase 6 migration adds legacy import tables so old POS sales can be included
 in local and cloud-backed reports.
+
+The Phase 7 migration adds expenses, simple daily closings, Google Sheet sync
+settings, and Google Sheet sync logs. These tables use owner/admin policies for
+expense, closing, and Google Sheet settings because they affect financial
+reporting.
 
 ## 6. Create a Supabase Auth User
 
@@ -105,8 +111,8 @@ If a logged-in user has no profile row yet, the app safely treats them as
 ## 9. What Is Still Not Implemented
 
 - No complex user management UI exists yet.
-- No Google Sheets sync exists yet.
-- No expenses or shift closing exists yet.
+- Google Sheets sync uses Apps Script Web App URL only, not Google OAuth.
+- Expenses and simple daily closing exist for owner/admin.
 - No realtime subscriptions exist yet.
 
 ## 10. Legacy Import Notes
@@ -120,5 +126,7 @@ If a logged-in user has no profile row yet, the app safely treats them as
 
 ## 11. Next Phase
 
-The next phase should not be Google Sheets until legacy import is tested with a
-real CSV from the old POS.
+The next phase should test the Phase 7 migration, expense sync, daily closing,
+and Apps Script Google Sheets sync with real production data.
+
+Read `GOOGLE_SHEETS_SYNC.md` before setting up the Google Sheets endpoint.

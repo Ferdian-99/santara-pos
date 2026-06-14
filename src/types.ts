@@ -28,6 +28,12 @@ export type TransactionItem = CartItem & {
 
 export type PaymentMethod = 'Cash' | 'QRIS' | 'Debit';
 export type ReportPaymentMethod = PaymentMethod | 'Legacy' | string;
+export type ExpensePaymentMethod =
+  | 'Cash'
+  | 'QRIS'
+  | 'Debit'
+  | 'Transfer'
+  | 'Other';
 
 export type DiscountType = 'none' | 'fixed' | 'percentage';
 
@@ -85,11 +91,68 @@ export type LegacyImportBatch = {
   totalHpp: number;
 };
 
+export type Expense = {
+  id: string;
+  date: string;
+  name: string;
+  category: string;
+  amount: number;
+  paymentMethod: ExpensePaymentMethod;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+};
+
+export type DailyClosing = {
+  id: string;
+  closingDate: string;
+  cashierName: string;
+  grossSales: number;
+  totalDiscount: number;
+  netSales: number;
+  totalHpp: number;
+  grossProfit: number;
+  totalExpenses: number;
+  netProfit: number;
+  cashSales: number;
+  qrisSales: number;
+  debitSales: number;
+  expectedCash: number;
+  actualCash: number;
+  cashDifference: number;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+};
+
+export type GoogleSheetSyncSettings = {
+  endpointUrl: string;
+  isEnabled: boolean;
+  updatedAt: string | null;
+  updatedBy: string;
+};
+
+export type GoogleSheetSyncLog = {
+  id: string;
+  reportMode: string;
+  selectedDate: string | null;
+  status: 'success' | 'error';
+  message: string;
+  syncedAt: string;
+  syncedBy: string;
+};
+
 export type AppStateData = {
   menuItems: MenuItem[];
   pendingOrders: PendingOrder[];
   completedTransactions: CompletedTransaction[];
   legacySales: LegacySale[];
   legacyImportBatches: LegacyImportBatch[];
+  expenses: Expense[];
+  dailyClosings: DailyClosing[];
+  googleSheetSyncSettings: GoogleSheetSyncSettings;
+  googleSheetSyncLogs: GoogleSheetSyncLog[];
   receiptCounter: number;
 };

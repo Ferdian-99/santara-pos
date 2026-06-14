@@ -2,7 +2,12 @@ import type {
   AppStateData,
   CartItem,
   CompletedTransaction,
+  DailyClosing,
   DiscountType,
+  Expense,
+  ExpensePaymentMethod,
+  GoogleSheetSyncLog,
+  GoogleSheetSyncSettings,
   LegacyImportBatch,
   LegacySale,
   MenuItem,
@@ -20,6 +25,13 @@ type PersistedAppState = AppStateData & {
 };
 
 const paymentMethods: PaymentMethod[] = ['Cash', 'QRIS', 'Debit'];
+const expensePaymentMethods: ExpensePaymentMethod[] = [
+  'Cash',
+  'QRIS',
+  'Debit',
+  'Transfer',
+  'Other',
+];
 const discountTypes: DiscountType[] = ['none', 'fixed', 'percentage'];
 
 export function createDefaultAppState(defaultMenuItems: MenuItem[]): AppStateData {
@@ -29,6 +41,10 @@ export function createDefaultAppState(defaultMenuItems: MenuItem[]): AppStateDat
     completedTransactions: [],
     legacySales: [],
     legacyImportBatches: [],
+    expenses: [],
+    dailyClosings: [],
+    googleSheetSyncSettings: createDefaultGoogleSheetSettings(),
+    googleSheetSyncLogs: [],
     receiptCounter: 0,
   };
 }
@@ -125,6 +141,14 @@ function normalizeAppState(
   const legacyImportBatches = normalizeLegacyImportBatches(
     value.legacyImportBatches,
   );
+  const expenses = normalizeExpenses(value.expenses);
+  const dailyClosings = normalizeDailyClosings(value.dailyClosings);
+  const googleSheetSyncSettings = normalizeGoogleSheetSyncSettings(
+    value.googleSheetSyncSettings,
+  );
+  const googleSheetSyncLogs = normalizeGoogleSheetSyncLogs(
+    value.googleSheetSyncLogs,
+  );
   const receiptCounter = normalizeReceiptCounter(value.receiptCounter);
 
   if (
@@ -133,6 +157,10 @@ function normalizeAppState(
     !completedTransactions ||
     !legacySales ||
     !legacyImportBatches ||
+    !expenses ||
+    !dailyClosings ||
+    !googleSheetSyncSettings ||
+    !googleSheetSyncLogs ||
     receiptCounter === null
   ) {
     return null;
@@ -144,6 +172,10 @@ function normalizeAppState(
     completedTransactions,
     legacySales,
     legacyImportBatches,
+    expenses,
+    dailyClosings,
+    googleSheetSyncSettings,
+    googleSheetSyncLogs,
     receiptCounter,
   };
 }
@@ -352,6 +384,167 @@ function normalizeLegacyImportBatch(value: unknown): LegacyImportBatch | null {
   };
 }
 
+function normalizeExpenses(value: unknown): Expense[] | null {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const expenses = value.map(normalizeExpense);
+
+  return expenses.every(Boolean) ? (expenses as Expense[]) : null;
+}
+
+function normalizeExpense(value: unknown): Expense | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    !isString(value.id) ||
+    !isString(value.date) ||
+    !isString(value.name) ||
+    !isString(value.category)
+  ) {
+    return null;
+  }
+
+  const createdAt = isString(value.createdAt) ? value.createdAt : value.date;
+
+  return {
+    id: value.id,
+    date: value.date,
+    name: value.name,
+    category: value.category,
+    amount: toNonNegativeNumber(value.amount),
+    paymentMethod: isExpensePaymentMethod(value.paymentMethod)
+      ? value.paymentMethod
+      : 'Cash',
+    notes: isString(value.notes) ? value.notes : '',
+    createdAt,
+    updatedAt: isString(value.updatedAt) ? value.updatedAt : createdAt,
+    createdBy: isString(value.createdBy) ? value.createdBy : 'Santara User',
+  };
+}
+
+function normalizeDailyClosings(value: unknown): DailyClosing[] | null {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const closings = value.map(normalizeDailyClosing);
+
+  return closings.every(Boolean) ? (closings as DailyClosing[]) : null;
+}
+
+function normalizeDailyClosing(value: unknown): DailyClosing | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    !isString(value.id) ||
+    !isString(value.closingDate) ||
+    !isString(value.cashierName)
+  ) {
+    return null;
+  }
+
+  const createdAt = isString(value.createdAt) ? value.createdAt : value.closingDate;
+
+  return {
+    id: value.id,
+    closingDate: value.closingDate,
+    cashierName: value.cashierName,
+    grossSales: toNonNegativeNumber(value.grossSales),
+    totalDiscount: toNonNegativeNumber(value.totalDiscount),
+    netSales: toNonNegativeNumber(value.netSales),
+    totalHpp: toNonNegativeNumber(value.totalHpp),
+    grossProfit: toNumber(value.grossProfit),
+    totalExpenses: toNonNegativeNumber(value.totalExpenses),
+    netProfit: toNumber(value.netProfit),
+    cashSales: toNonNegativeNumber(value.cashSales),
+    qrisSales: toNonNegativeNumber(value.qrisSales),
+    debitSales: toNonNegativeNumber(value.debitSales),
+    expectedCash: toNumber(value.expectedCash),
+    actualCash: toNumber(value.actualCash),
+    cashDifference: toNumber(value.cashDifference),
+    notes: isString(value.notes) ? value.notes : '',
+    createdAt,
+    updatedAt: isString(value.updatedAt) ? value.updatedAt : createdAt,
+    createdBy: isString(value.createdBy) ? value.createdBy : 'Santara User',
+  };
+}
+
+function normalizeGoogleSheetSyncSettings(
+  value: unknown,
+): GoogleSheetSyncSettings | null {
+  if (value === undefined) {
+    return createDefaultGoogleSheetSettings();
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    endpointUrl: isString(value.endpointUrl) ? value.endpointUrl : '',
+    isEnabled:
+      typeof value.isEnabled === 'boolean'
+        ? value.isEnabled
+        : Boolean(isString(value.endpointUrl) && value.endpointUrl),
+    updatedAt: isString(value.updatedAt) ? value.updatedAt : null,
+    updatedBy: isString(value.updatedBy) ? value.updatedBy : 'Santara User',
+  };
+}
+
+function normalizeGoogleSheetSyncLogs(value: unknown): GoogleSheetSyncLog[] | null {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const logs = value.map(normalizeGoogleSheetSyncLog);
+
+  return logs.every(Boolean) ? (logs as GoogleSheetSyncLog[]) : null;
+}
+
+function normalizeGoogleSheetSyncLog(value: unknown): GoogleSheetSyncLog | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    !isString(value.id) ||
+    !isString(value.reportMode) ||
+    !isString(value.status) ||
+    !isString(value.message) ||
+    !isString(value.syncedAt)
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    reportMode: value.reportMode,
+    selectedDate: isString(value.selectedDate) ? value.selectedDate : null,
+    status: value.status === 'success' ? 'success' : 'error',
+    message: value.message,
+    syncedAt: value.syncedAt,
+    syncedBy: isString(value.syncedBy) ? value.syncedBy : 'Santara User',
+  };
+}
+
 function normalizeTransactionItems(value: unknown): TransactionItem[] | null {
   if (!Array.isArray(value)) {
     return null;
@@ -420,6 +613,10 @@ function toNonNegativeNumber(value: unknown) {
     : 0;
 }
 
+function toNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 function toNullableNonNegativeNumber(value: unknown) {
   if (value === null) {
     return null;
@@ -440,8 +637,24 @@ function isPaymentMethod(value: unknown): value is PaymentMethod {
   return isString(value) && paymentMethods.includes(value as PaymentMethod);
 }
 
+function isExpensePaymentMethod(value: unknown): value is ExpensePaymentMethod {
+  return (
+    isString(value) &&
+    expensePaymentMethods.includes(value as ExpensePaymentMethod)
+  );
+}
+
 function isDiscountType(value: unknown): value is DiscountType {
   return isString(value) && discountTypes.includes(value as DiscountType);
+}
+
+function createDefaultGoogleSheetSettings(): GoogleSheetSyncSettings {
+  return {
+    endpointUrl: '',
+    isEnabled: false,
+    updatedAt: null,
+    updatedBy: 'Santara User',
+  };
 }
 
 function canUseLocalStorage() {

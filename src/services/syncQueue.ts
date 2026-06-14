@@ -1,5 +1,9 @@
 import type {
   CompletedTransaction,
+  DailyClosing,
+  Expense,
+  GoogleSheetSyncLog,
+  GoogleSheetSyncSettings,
   LegacyImportBatch,
   LegacySale,
   MenuItem,
@@ -12,7 +16,12 @@ export type SyncOperationType =
   | 'pending-order-upsert'
   | 'pending-order-delete'
   | 'app-settings-upsert'
-  | 'legacy-import-upsert';
+  | 'legacy-import-upsert'
+  | 'expense-upsert'
+  | 'expense-delete'
+  | 'daily-closing-upsert'
+  | 'google-sheet-settings-upsert'
+  | 'google-sheet-sync-log-upsert';
 
 export type SyncOperation = {
   id: string;
@@ -25,7 +34,12 @@ export type SyncOperation = {
     | { pendingOrder: PendingOrder }
     | { pendingOrderId: string }
     | { receiptCounter: number }
-    | { batch: LegacyImportBatch; sales: LegacySale[] };
+    | { batch: LegacyImportBatch; sales: LegacySale[] }
+    | { expense: Expense }
+    | { expenseId: string }
+    | { dailyClosing: DailyClosing }
+    | { googleSheetSyncSettings: GoogleSheetSyncSettings }
+    | { googleSheetSyncLog: GoogleSheetSyncLog };
 };
 
 export type SyncMeta = {
@@ -207,6 +221,66 @@ export function createLegacyImportSyncOperation(
     payload: {
       batch,
       sales,
+    },
+  };
+}
+
+export function createExpenseUpsertOperation(
+  expense: Expense,
+): Omit<SyncOperation, 'id' | 'createdAt'> {
+  return {
+    type: 'expense-upsert',
+    dedupeKey: `expense:${expense.id}`,
+    payload: {
+      expense,
+    },
+  };
+}
+
+export function createExpenseDeleteOperation(
+  expenseId: string,
+): Omit<SyncOperation, 'id' | 'createdAt'> {
+  return {
+    type: 'expense-delete',
+    dedupeKey: `expense-delete:${expenseId}`,
+    payload: {
+      expenseId,
+    },
+  };
+}
+
+export function createDailyClosingSyncOperation(
+  dailyClosing: DailyClosing,
+): Omit<SyncOperation, 'id' | 'createdAt'> {
+  return {
+    type: 'daily-closing-upsert',
+    dedupeKey: `daily-closing:${dailyClosing.closingDate}`,
+    payload: {
+      dailyClosing,
+    },
+  };
+}
+
+export function createGoogleSheetSettingsSyncOperation(
+  googleSheetSyncSettings: GoogleSheetSyncSettings,
+): Omit<SyncOperation, 'id' | 'createdAt'> {
+  return {
+    type: 'google-sheet-settings-upsert',
+    dedupeKey: 'google-sheet:settings',
+    payload: {
+      googleSheetSyncSettings,
+    },
+  };
+}
+
+export function createGoogleSheetSyncLogOperation(
+  googleSheetSyncLog: GoogleSheetSyncLog,
+): Omit<SyncOperation, 'id' | 'createdAt'> {
+  return {
+    type: 'google-sheet-sync-log-upsert',
+    dedupeKey: `google-sheet:log:${googleSheetSyncLog.id}`,
+    payload: {
+      googleSheetSyncLog,
     },
   };
 }

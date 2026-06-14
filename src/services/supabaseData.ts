@@ -2,7 +2,12 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type {
   AppStateData,
   CompletedTransaction,
+  DailyClosing,
   DiscountType,
+  Expense,
+  ExpensePaymentMethod,
+  GoogleSheetSyncLog,
+  GoogleSheetSyncSettings,
   LegacyImportBatch,
   LegacySale,
   MenuItem,
@@ -54,6 +59,37 @@ export async function pushSyncOperation(operation: SyncOperation) {
 
   if (operation.type === 'legacy-import-upsert' && 'batch' in payload) {
     await upsertLegacyImport(payload.batch, payload.sales);
+    return;
+  }
+
+  if (operation.type === 'expense-upsert' && 'expense' in payload) {
+    await upsertExpense(payload.expense);
+    return;
+  }
+
+  if (operation.type === 'expense-delete' && 'expenseId' in payload) {
+    await deleteExpense(payload.expenseId);
+    return;
+  }
+
+  if (operation.type === 'daily-closing-upsert' && 'dailyClosing' in payload) {
+    await upsertDailyClosing(payload.dailyClosing);
+    return;
+  }
+
+  if (
+    operation.type === 'google-sheet-settings-upsert' &&
+    'googleSheetSyncSettings' in payload
+  ) {
+    await upsertGoogleSheetSettings(payload.googleSheetSyncSettings);
+    return;
+  }
+
+  if (
+    operation.type === 'google-sheet-sync-log-upsert' &&
+    'googleSheetSyncLog' in payload
+  ) {
+    await upsertGoogleSheetSyncLog(payload.googleSheetSyncLog);
   }
 }
 
@@ -70,6 +106,10 @@ export async function pullCloudAppState(
     pendingOrders,
     receiptCounter,
     legacyData,
+    expenses,
+    dailyClosings,
+    googleSheetSyncSettings,
+    googleSheetSyncLogs,
   ] =
     await Promise.all([
       fetchMenuItems(),
@@ -77,6 +117,10 @@ export async function pullCloudAppState(
       fetchPendingOrders(),
       fetchReceiptCounter(),
       fetchLegacyImports(),
+      fetchExpenses(),
+      fetchDailyClosings(),
+      fetchGoogleSheetSettings(),
+      fetchGoogleSheetSyncLogs(),
     ]);
 
   const hasCloudData =
@@ -85,6 +129,10 @@ export async function pullCloudAppState(
     pendingOrders.length > 0 ||
     legacyData.sales.length > 0 ||
     legacyData.batches.length > 0 ||
+    expenses.length > 0 ||
+    dailyClosings.length > 0 ||
+    googleSheetSyncSettings !== null ||
+    googleSheetSyncLogs.length > 0 ||
     receiptCounter !== null;
 
   if (!hasCloudData) {
@@ -109,6 +157,23 @@ export async function pullCloudAppState(
       legacyData.batches.length > 0
         ? mergeLegacyBatches(currentData.legacyImportBatches, legacyData.batches)
         : currentData.legacyImportBatches,
+    expenses:
+      expenses.length > 0
+        ? mergeExpenses(currentData.expenses, expenses)
+        : currentData.expenses,
+    dailyClosings:
+      dailyClosings.length > 0
+        ? mergeDailyClosings(currentData.dailyClosings, dailyClosings)
+        : currentData.dailyClosings,
+    googleSheetSyncSettings:
+      googleSheetSyncSettings ?? currentData.googleSheetSyncSettings,
+    googleSheetSyncLogs:
+      googleSheetSyncLogs.length > 0
+        ? mergeGoogleSheetSyncLogs(
+            currentData.googleSheetSyncLogs,
+            googleSheetSyncLogs,
+          )
+        : currentData.googleSheetSyncLogs,
     receiptCounter: Math.max(
       currentData.receiptCounter,
       receiptCounter ?? 0,
@@ -331,6 +396,120 @@ async function upsertLegacyImport(
   }
 }
 
+async function upsertExpense(expense: Expense) {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.from('expenses').upsert(
+    {
+      id: stableUuid('expense', expense.id),
+      local_id: expense.id,
+      expense_date: expense.date,
+      name: expense.name,
+      category: expense.category,
+      amount: expense.amount,
+      payment_method: expense.paymentMethod,
+      notes: expense.notes,
+      created_by_name: expense.createdBy,
+      created_at: expense.createdAt,
+      updated_at: expense.updatedAt,
+    },
+    { onConflict: 'id' },
+  );
+
+  throwIfError(error, 'Gagal menyinkronkan pengeluaran.');
+}
+
+async function deleteExpense(expenseId: string) {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from('expenses')
+    .delete()
+    .eq('id', stableUuid('expense', expenseId));
+
+  throwIfError(error, 'Gagal menghapus pengeluaran di cloud.');
+}
+
+async function upsertDailyClosing(dailyClosing: DailyClosing) {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.from('daily_closings').upsert(
+    {
+      id: stableUuid('daily-closing', dailyClosing.id),
+      local_id: dailyClosing.id,
+      closing_date: dailyClosing.closingDate,
+      cashier_name: dailyClosing.cashierName,
+      gross_sales: dailyClosing.grossSales,
+      total_discount: dailyClosing.totalDiscount,
+      net_sales: dailyClosing.netSales,
+      total_hpp: dailyClosing.totalHpp,
+      gross_profit: dailyClosing.grossProfit,
+      total_expenses: dailyClosing.totalExpenses,
+      net_profit: dailyClosing.netProfit,
+      cash_sales: dailyClosing.cashSales,
+      qris_sales: dailyClosing.qrisSales,
+      debit_sales: dailyClosing.debitSales,
+      expected_cash: dailyClosing.expectedCash,
+      actual_cash: dailyClosing.actualCash,
+      cash_difference: dailyClosing.cashDifference,
+      notes: dailyClosing.notes,
+      created_by_name: dailyClosing.createdBy,
+      created_at: dailyClosing.createdAt,
+      updated_at: dailyClosing.updatedAt,
+    },
+    { onConflict: 'id' },
+  );
+
+  throwIfError(error, 'Gagal menyinkronkan closing harian.');
+}
+
+async function upsertGoogleSheetSettings(settings: GoogleSheetSyncSettings) {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.from('google_sheet_sync_settings').upsert(
+    {
+      id: stableUuid('google-sheet-settings', 'default'),
+      endpoint_url: settings.endpointUrl,
+      is_enabled: settings.isEnabled,
+      updated_by_name: settings.updatedBy,
+      updated_at: settings.updatedAt ?? new Date().toISOString(),
+    },
+    { onConflict: 'id' },
+  );
+
+  throwIfError(error, 'Gagal menyinkronkan pengaturan Google Sheet.');
+}
+
+async function upsertGoogleSheetSyncLog(log: GoogleSheetSyncLog) {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.from('google_sheet_sync_logs').upsert(
+    {
+      id: stableUuid('google-sheet-sync-log', log.id),
+      local_id: log.id,
+      report_mode: log.reportMode,
+      selected_date: log.selectedDate,
+      status: log.status,
+      message: log.message,
+      synced_at: log.syncedAt,
+      synced_by_name: log.syncedBy,
+    },
+    { onConflict: 'id' },
+  );
+
+  throwIfError(error, 'Gagal menyinkronkan log Google Sheet.');
+}
+
 async function fetchMenuItems(): Promise<MenuItem[]> {
   if (!supabase) {
     return [];
@@ -490,6 +669,117 @@ async function fetchLegacyImports(): Promise<{
   };
 }
 
+async function fetchExpenses(): Promise<Expense[]> {
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('*')
+    .order('expense_date', { ascending: false });
+
+  throwIfError(error, 'Gagal mengambil pengeluaran cloud.');
+
+  return (data ?? []).map((row: DbRow) => ({
+    id: toStringValue(row.local_id) || toStringValue(row.id),
+    date: toStringValue(row.expense_date),
+    name: toStringValue(row.name),
+    category: toStringValue(row.category),
+    amount: toNumberValue(row.amount),
+    paymentMethod: toExpensePaymentMethod(row.payment_method),
+    notes: toStringValue(row.notes),
+    createdAt: toStringValue(row.created_at),
+    updatedAt: toStringValue(row.updated_at),
+    createdBy: toStringValue(row.created_by_name) || 'Santara User',
+  }));
+}
+
+async function fetchDailyClosings(): Promise<DailyClosing[]> {
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('daily_closings')
+    .select('*')
+    .order('closing_date', { ascending: false });
+
+  throwIfError(error, 'Gagal mengambil closing harian cloud.');
+
+  return (data ?? []).map((row: DbRow) => ({
+    id: toStringValue(row.local_id) || toStringValue(row.id),
+    closingDate: toStringValue(row.closing_date),
+    cashierName: toStringValue(row.cashier_name),
+    grossSales: toNumberValue(row.gross_sales),
+    totalDiscount: toNumberValue(row.total_discount),
+    netSales: toNumberValue(row.net_sales),
+    totalHpp: toNumberValue(row.total_hpp),
+    grossProfit: toSignedNumberValue(row.gross_profit),
+    totalExpenses: toNumberValue(row.total_expenses),
+    netProfit: toSignedNumberValue(row.net_profit),
+    cashSales: toNumberValue(row.cash_sales),
+    qrisSales: toNumberValue(row.qris_sales),
+    debitSales: toNumberValue(row.debit_sales),
+    expectedCash: toSignedNumberValue(row.expected_cash),
+    actualCash: toSignedNumberValue(row.actual_cash),
+    cashDifference: toSignedNumberValue(row.cash_difference),
+    notes: toStringValue(row.notes),
+    createdAt: toStringValue(row.created_at),
+    updatedAt: toStringValue(row.updated_at),
+    createdBy: toStringValue(row.created_by_name) || 'Santara User',
+  }));
+}
+
+async function fetchGoogleSheetSettings(): Promise<GoogleSheetSyncSettings | null> {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('google_sheet_sync_settings')
+    .select('*')
+    .limit(1)
+    .maybeSingle();
+
+  throwIfError(error, 'Gagal mengambil pengaturan Google Sheet cloud.');
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    endpointUrl: toStringValue(data.endpoint_url),
+    isEnabled: Boolean(data.is_enabled),
+    updatedAt: toStringValue(data.updated_at) || null,
+    updatedBy: toStringValue(data.updated_by_name) || 'Santara User',
+  };
+}
+
+async function fetchGoogleSheetSyncLogs(): Promise<GoogleSheetSyncLog[]> {
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('google_sheet_sync_logs')
+    .select('*')
+    .order('synced_at', { ascending: false })
+    .limit(20);
+
+  throwIfError(error, 'Gagal mengambil log Google Sheet cloud.');
+
+  return (data ?? []).map((row: DbRow) => ({
+    id: toStringValue(row.local_id) || toStringValue(row.id),
+    reportMode: toStringValue(row.report_mode),
+    selectedDate: toStringValue(row.selected_date) || null,
+    status: toStringValue(row.status) === 'success' ? 'success' : 'error',
+    message: toStringValue(row.message),
+    syncedAt: toStringValue(row.synced_at),
+    syncedBy: toStringValue(row.synced_by_name) || 'Santara User',
+  }));
+}
+
 function mapTransactionItem(row: DbRow): TransactionItem {
   return {
     id: toStringValue(row.menu_item_id || row.id),
@@ -546,6 +836,51 @@ function mergeLegacyBatches(
     (first, second) =>
       new Date(second.importedAt).getTime() - new Date(first.importedAt).getTime(),
   );
+}
+
+function mergeExpenses(localExpenses: Expense[], cloudExpenses: Expense[]) {
+  const expenseMap = new Map<string, Expense>();
+
+  localExpenses.forEach((expense) => expenseMap.set(expense.id, expense));
+  cloudExpenses.forEach((expense) => expenseMap.set(expense.id, expense));
+
+  return Array.from(expenseMap.values()).sort(
+    (first, second) =>
+      new Date(second.date).getTime() - new Date(first.date).getTime(),
+  );
+}
+
+function mergeDailyClosings(
+  localClosings: DailyClosing[],
+  cloudClosings: DailyClosing[],
+) {
+  const closingMap = new Map<string, DailyClosing>();
+
+  localClosings.forEach((closing) => closingMap.set(closing.id, closing));
+  cloudClosings.forEach((closing) => closingMap.set(closing.id, closing));
+
+  return Array.from(closingMap.values()).sort(
+    (first, second) =>
+      new Date(second.closingDate).getTime() -
+      new Date(first.closingDate).getTime(),
+  );
+}
+
+function mergeGoogleSheetSyncLogs(
+  localLogs: GoogleSheetSyncLog[],
+  cloudLogs: GoogleSheetSyncLog[],
+) {
+  const logMap = new Map<string, GoogleSheetSyncLog>();
+
+  localLogs.forEach((log) => logMap.set(log.id, log));
+  cloudLogs.forEach((log) => logMap.set(log.id, log));
+
+  return Array.from(logMap.values())
+    .sort(
+      (first, second) =>
+        new Date(second.syncedAt).getTime() - new Date(first.syncedAt).getTime(),
+    )
+    .slice(0, 30);
 }
 
 function getReceiptCounterFromTransactions(transactions: CompletedTransaction[]) {
@@ -613,6 +948,12 @@ function toNumberValue(value: unknown) {
   return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : 0;
 }
 
+function toSignedNumberValue(value: unknown) {
+  const parsedValue = Number(value);
+
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
 function toNullableNumberValue(value: unknown) {
   return value === null || value === undefined ? null : toNumberValue(value);
 }
@@ -627,6 +968,21 @@ function toPaymentMethod(value: unknown): PaymentMethod {
   const text = toStringValue(value);
 
   return text === 'QRIS' || text === 'Debit' ? text : 'Cash';
+}
+
+function toExpensePaymentMethod(value: unknown): ExpensePaymentMethod {
+  const text = toStringValue(value);
+
+  if (
+    text === 'QRIS' ||
+    text === 'Debit' ||
+    text === 'Transfer' ||
+    text === 'Other'
+  ) {
+    return text;
+  }
+
+  return 'Cash';
 }
 
 function toArray(value: unknown): DbRow[] {

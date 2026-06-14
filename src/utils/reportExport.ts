@@ -39,6 +39,9 @@ export function exportReportCsv(context: ExportContext) {
     ['Total HPP', context.report.totalHpp],
     ['Gross Profit / Laba Kotor', context.report.grossProfit],
     ['Gross Margin', formatPercentValue(context.report.grossMargin)],
+    ['Total Pengeluaran', context.report.totalExpenses],
+    ['Net Profit / Laba Bersih', context.report.netProfit],
+    ['Net Margin', formatPercentValue(context.report.netMargin)],
     ['Total Transaksi', context.report.totalTransactions],
     ['Average Transaction Value', context.report.averageTransactionValue],
     ['POS transaction count', context.report.sourceTransactionCount],
@@ -63,6 +66,24 @@ export function exportReportCsv(context: ExportContext) {
       'Average discount per discounted transaction',
       context.report.averageDiscount,
     ],
+    [],
+    ['Expense Summary'],
+    ['Category', 'Total'],
+    ...context.report.expenseSummary.map((summary) => [
+      summary.category,
+      summary.total,
+    ]),
+    [],
+    ['Expense List'],
+    ['Date', 'Name', 'Category', 'Amount', 'Payment Method', 'Notes'],
+    ...context.report.expenses.map((expense) => [
+      expense.date,
+      expense.name,
+      expense.category,
+      expense.amount,
+      expense.paymentMethod,
+      expense.notes,
+    ]),
     [],
     ['Menu Sales'],
     [
@@ -96,6 +117,14 @@ export function exportReportCsv(context: ExportContext) {
       item.quantity,
       item.netSales,
     ]),
+    [],
+    ['Daily Closing'],
+    ['Metric', 'Value'],
+    ['Date', context.report.dailyClosing?.closingDate],
+    ['Expected Cash', context.report.dailyClosing?.expectedCash],
+    ['Actual Cash', context.report.dailyClosing?.actualCash],
+    ['Cash Difference', context.report.dailyClosing?.cashDifference],
+    ['Notes', context.report.dailyClosing?.notes],
   ];
 
   downloadTextFile(
@@ -115,6 +144,9 @@ export function exportReportJson(context: ExportContext) {
       totalHpp: context.report.totalHpp,
       grossProfit: context.report.grossProfit,
       grossMargin: context.report.grossMargin,
+      totalExpenses: context.report.totalExpenses,
+      netProfit: context.report.netProfit,
+      netMargin: context.report.netMargin,
       totalTransactions: context.report.totalTransactions,
       averageTransactionValue: context.report.averageTransactionValue,
     },
@@ -124,6 +156,8 @@ export function exportReportJson(context: ExportContext) {
       discountedTransactionCount: context.report.discountedTransactionCount,
       averageDiscountPerDiscountedTransaction: context.report.averageDiscount,
     },
+    expenseSummary: context.report.expenseSummary,
+    expenseList: context.report.expenses,
     menuSales: context.report.menuSales,
     bestSellers: context.report.bestSellers.map((item, index) => ({
       rank: index + 1,
@@ -134,6 +168,7 @@ export function exportReportJson(context: ExportContext) {
     sourceTransactionCount: context.report.sourceTransactionCount,
     sourceLegacyCount: context.report.sourceLegacyCount,
     includesLegacyImport: context.report.hasLegacyData,
+    dailyClosing: context.report.dailyClosing,
   };
 
   downloadTextFile(

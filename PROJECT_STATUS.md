@@ -40,13 +40,18 @@ The app currently has:
 * CSV legacy sales import
 * Legacy import preview and batch history
 * Legacy sales included in reports and CSV/JSON report export
+* Pengeluaran tab for owner/admin
+* Expense local persistence and Supabase sync queue
+* Reports include expenses, net profit, and net margin
+* Simple daily closing inside Laporan
+* Google Sheets sync via Apps Script Web App URL
 * Branch mismatch was fixed, latest work is on `main`
 
 ## Important Current Limitation
 
 * Data is still localStorage-first and browser-local, so it is not ready as a multi-device production database.
 * Supabase autosync exists, but localStorage remains the first safety layer while cloud setup is tested.
-* There is no Google Sheets sync yet.
+* Google Sheets sync uses a simple Apps Script endpoint, not Google OAuth.
 
 ## Phase 5A Supabase Preparation
 
@@ -124,21 +129,46 @@ What exists:
 What is still not implemented:
 
 * No XLSX import exists yet.
-* No Google Sheets sync exists yet.
-* No expenses, shift closing, realtime subscriptions, or complex accounting exists yet.
+* Phase 7 added expenses, simple daily closing, and Google Sheets Apps Script sync after this legacy import phase.
+* No realtime subscriptions or complex accounting exists yet.
+
+## Phase 7 Expenses, Closing, and Google Sheets Sync
+
+What exists:
+
+* Owner/admin can access `Pengeluaran`.
+* Cashier cannot access the expense screen.
+* Expenses are stored in localStorage and queued for Supabase autosync.
+* Expenses support date, name, category, amount, payment method, notes, edit, and delete.
+* `Laporan` includes total expenses, net profit, and net margin.
+* Report CSV/JSON export includes expense summary, expense list, and daily closing data.
+* `Closing Harian` can save a simple daily closing for Hari Ini or Pilih Tanggal.
+* Daily closing stores sales, HPP, expenses, net profit, payment summary, expected cash, actual cash, cash difference, and notes.
+* Google Sheets sync uses an Apps Script Web App URL saved in the app.
+* `GOOGLE_SHEETS_SYNC.md` documents the Apps Script setup for beginners.
+* `supabase/migrations/20260614000500_santara_pos_expenses_closing.sql` adds expenses, daily closings, Google Sheet sync settings, and Google Sheet sync logs.
+
+What is still not implemented:
+
+* No Google OAuth or direct Google API client exists.
+* No XLSX export exists yet.
+* No expense approval workflow exists.
+* No shift closing with cashier handover exists.
+* No realtime subscriptions or complex accounting exists yet.
 
 ## Next Recommended Phase
 
 The next phase should be:
 
-Phase 6B - Legacy Import Real CSV Testing
+Phase 7B - Production Sync Testing
 
 Goal:
 
-* Test the import screen with a real CSV from the old POS.
-* Adjust column aliases only if the old POS uses unexpected headings.
-* Confirm imported rows appear correctly in Hari Ini, Pilih Tanggal, Bulan Ini, and Semua Waktu reports.
-* Confirm Supabase sync stores legacy import batches and legacy sales.
+* Run the new Supabase migration in production.
+* Test owner/admin expense create, edit, delete, and sync.
+* Test daily closing with real daily totals.
+* Deploy Apps Script and test Google Sheets sync from Vercel.
+* Confirm reports and exports include expenses and closing data.
 
 ## Future Roadmap
 

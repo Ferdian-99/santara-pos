@@ -1,5 +1,7 @@
 import type {
   CompletedTransaction,
+  DailyClosing,
+  Expense,
   LegacySale,
   ReportPaymentMethod,
 } from '../types';
@@ -9,6 +11,11 @@ export type ReportMode = 'today' | 'date' | 'month' | 'all';
 export type PaymentSummary = {
   method: ReportPaymentMethod;
   transactionCount: number;
+  total: number;
+};
+
+export type ExpenseSummary = {
+  category: string;
   total: number;
 };
 
@@ -28,15 +35,21 @@ export type MenuSalesSummary = {
 export type SalesReport = {
   transactions: CompletedTransaction[];
   legacySales: LegacySale[];
+  expenses: Expense[];
+  dailyClosing: DailyClosing | null;
   grossSales: number;
   totalDiscount: number;
   netSales: number;
   totalHpp: number;
   grossProfit: number;
   grossMargin: number;
+  totalExpenses: number;
+  netProfit: number;
+  netMargin: number;
   totalTransactions: number;
   averageTransactionValue: number;
   paymentSummary: PaymentSummary[];
+  expenseSummary: ExpenseSummary[];
   menuSales: MenuSalesSummary[];
   bestSellers: MenuSalesSummary[];
   discountedTransactionCount: number;
@@ -53,9 +66,13 @@ export function buildSalesReport(
   mode: ReportMode,
   selectedDate: string,
   legacySales: LegacySale[] = [],
+  expenses: Expense[] = [],
+  dailyClosings: DailyClosing[] = [],
 ): SalesReport {
   const filteredTransactions = filterTransactions(transactions, mode, selectedDate);
   const filteredLegacySales = filterLegacySales(legacySales, mode, selectedDate);
+  const filteredExpenses = filterExpenses(expenses, mode, selectedDate);
+  const dailyClosing = findDailyClosing(dailyClosings, mode, selectedDate);
   const transactionRecords = filteredTransactions.map(mapTransactionToReportRecord);
   const legacyRecords = filteredLegacySales.map(mapLegacySaleToReportRecord);
   const reportRecords = [...transactionRecords, ...legacyRecords];
@@ -70,10 +87,16 @@ export function buildSalesReport(
   const netSales = Math.max(grossSales - totalDiscount, 0);
   const totalHpp = filteredTransactions.reduce(
     (total, transaction) => total + getTransactionHpp(transaction),
-    0,
+  0,
   ) + filteredLegacySales.reduce((total, sale) => total + sale.hppTotal, 0);
   const grossProfit = netSales - totalHpp;
   const grossMargin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
+  const totalExpenses = filteredExpenses.reduce(
+    (total, expense) => total + expense.amount,
+    0,
+  );
+  const netProfit = grossProfit - totalExpenses;
+  const netMargin = netSales > 0 ? (netProfit / netSales) * 100 : 0;
   const totalTransactions = reportRecords.length;
   const discountedTransactions = filteredTransactions.filter(
     (transaction) => transaction.discountAmount > 0,
@@ -85,16 +108,22 @@ export function buildSalesReport(
   return {
     transactions: filteredTransactions,
     legacySales: filteredLegacySales,
+    expenses: filteredExpenses,
+    dailyClosing,
     grossSales,
     totalDiscount,
     netSales,
     totalHpp,
     grossProfit,
     grossMargin,
+    totalExpenses,
+    netProfit,
+    netMargin,
     totalTransactions,
     averageTransactionValue:
       totalTransactions > 0 ? netSales / totalTransactions : 0,
     paymentSummary: buildPaymentSummary(reportRecords),
+    expenseSummary: buildExpenseSummary(filteredExpenses),
     menuSales: buildMenuSales(reportRecords),
     bestSellers: buildMenuSales(reportRecords)
       .sort((first, second) => second.quantity - first.quantity)
@@ -182,6 +211,55 @@ function filterLegacySales(
   });
 }
 
+export function filterExpenses(
+  expenses: Expense[],
+  mode: ReportMode,
+  selectedDate: string,
+) {
+  if (mode === 'all') {
+    return expenses;
+  }
+
+  const now = new Date();
+
+  return expenses.filter((expense) => {
+    const expenseDate = new Date(expense.date);
+
+    if (Number.isNaN(expenseDate.getTime())) {
+      return false;
+    }
+
+    if (mode === 'today') {
+      return toInputDate(expenseDate) === toInputDate(now);
+    }
+
+    if (mode === 'date') {
+      return toInputDate(expenseDate) === selectedDate;
+    }
+
+    return (
+      expenseDate.getFullYear() === now.getFullYear() &&
+      expenseDate.getMonth() === now.getMonth()
+    );
+  });
+}
+
+function findDailyClosing(
+  dailyClosings: DailyClosing[],
+  mode: ReportMode,
+  selectedDate: string,
+) {
+  if (mode === 'all' || mode === 'month') {
+    return null;
+  }
+
+  const dateValue = mode === 'today' ? toInputDate(new Date()) : selectedDate;
+
+  return (
+    dailyClosings.find((closing) => closing.closingDate === dateValue) ?? null
+  );
+}
+
 type ReportRecord = {
   dateTime: string;
   paymentMethod: ReportPaymentMethod;
@@ -229,6 +307,21 @@ function buildPaymentSummary(records: ReportRecord[]): PaymentSummary[] {
         };
       }),
   );
+}
+
+function buildExpenseSummary(expenses: Expense[]): ExpenseSummary[] {
+  const expenseMap = new Map<string, number>();
+
+  expenses.forEach((expense) => {
+    expenseMap.set(
+      expense.category,
+      (expenseMap.get(expense.category) ?? 0) + expense.amount,
+    );
+  });
+
+  return Array.from(expenseMap.entries())
+    .map(([category, total]) => ({ category, total }))
+    .sort((first, second) => second.total - first.total);
 }
 
 function buildMenuSales(records: ReportRecord[]): MenuSalesSummary[] {

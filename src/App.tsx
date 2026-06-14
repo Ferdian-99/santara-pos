@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckoutModal } from './components/CheckoutModal';
+import { Expenses } from './components/Expenses';
 import { ConfirmOrderModal, SaveOrderModal } from './components/HoldOrderModals';
 import { LegacyImport } from './components/LegacyImport';
 import { LoginScreen } from './components/LoginScreen';
@@ -25,6 +26,11 @@ import {
 } from './services/supabaseData';
 import {
   addSyncOperation,
+  createDailyClosingSyncOperation,
+  createExpenseDeleteOperation,
+  createExpenseUpsertOperation,
+  createGoogleSheetSettingsSyncOperation,
+  createGoogleSheetSyncLogOperation,
   createLegacyImportSyncOperation,
   createMenuSyncOperation,
   createPendingOrderDeleteOperation,
@@ -42,6 +48,10 @@ import type {
   AppStateData,
   CartItem,
   CompletedTransaction,
+  DailyClosing,
+  Expense,
+  GoogleSheetSyncLog,
+  GoogleSheetSyncSettings,
   LegacyImportBatch,
   LegacySale,
   MenuItem,
@@ -61,7 +71,13 @@ import {
 const CASHIER_NAME = 'Santara Cashier';
 const defaultMenuItems = initialMenuCategories.flatMap((category) => category.items);
 
-type AppTab = 'cashier' | 'menu' | 'receipts' | 'reports' | 'legacy';
+type AppTab =
+  | 'cashier'
+  | 'menu'
+  | 'receipts'
+  | 'reports'
+  | 'expenses'
+  | 'legacy';
 type AuthStatus = 'loading' | 'local' | 'authenticated' | 'unauthenticated';
 
 type PendingOrderAction = {
@@ -82,6 +98,7 @@ const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: 'menu', label: 'Kelola Menu' },
   { id: 'receipts', label: 'Riwayat Struk' },
   { id: 'reports', label: 'Laporan' },
+  { id: 'expenses', label: 'Pengeluaran' },
   { id: 'legacy', label: 'Import Data Lama' },
 ];
 
@@ -107,6 +124,15 @@ function App() {
   const [legacyImportBatches, setLegacyImportBatches] = useState<
     LegacyImportBatch[]
   >(initialAppData.legacyImportBatches);
+  const [expenses, setExpenses] = useState<Expense[]>(initialAppData.expenses);
+  const [dailyClosings, setDailyClosings] = useState<DailyClosing[]>(
+    initialAppData.dailyClosings,
+  );
+  const [googleSheetSyncSettings, setGoogleSheetSyncSettings] =
+    useState<GoogleSheetSyncSettings>(initialAppData.googleSheetSyncSettings);
+  const [googleSheetSyncLogs, setGoogleSheetSyncLogs] = useState<
+    GoogleSheetSyncLog[]
+  >(initialAppData.googleSheetSyncLogs);
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>(
     initialAppData.pendingOrders,
   );
@@ -156,10 +182,18 @@ function App() {
       completedTransactions,
       legacySales,
       legacyImportBatches,
+      expenses,
+      dailyClosings,
+      googleSheetSyncSettings,
+      googleSheetSyncLogs,
       receiptCounter,
     }),
     [
       completedTransactions,
+      dailyClosings,
+      expenses,
+      googleSheetSyncLogs,
+      googleSheetSyncSettings,
       legacyImportBatches,
       legacySales,
       menuItems,
@@ -274,6 +308,10 @@ function App() {
     setCompletedTransactions(data.completedTransactions);
     setLegacySales(data.legacySales);
     setLegacyImportBatches(data.legacyImportBatches);
+    setExpenses(data.expenses);
+    setDailyClosings(data.dailyClosings);
+    setGoogleSheetSyncSettings(data.googleSheetSyncSettings);
+    setGoogleSheetSyncLogs(data.googleSheetSyncLogs);
     setReceiptCounter(data.receiptCounter);
     setActiveCategoryName(data.menuItems[0]?.category ?? initialMenuCategories[0].name);
     saveAppState(data);
@@ -602,12 +640,66 @@ function App() {
     enqueueSyncOperations([createLegacyImportSyncOperation(batch, sales)]);
   };
 
+  const addExpense = (expense: Expense) => {
+    setExpenses((currentExpenses) => [expense, ...currentExpenses]);
+    enqueueSyncOperations([createExpenseUpsertOperation(expense)]);
+  };
+
+  const updateExpense = (expense: Expense) => {
+    setExpenses((currentExpenses) =>
+      currentExpenses.map((currentExpense) =>
+        currentExpense.id === expense.id ? expense : currentExpense,
+      ),
+    );
+    enqueueSyncOperations([createExpenseUpsertOperation(expense)]);
+  };
+
+  const deleteExpense = (expenseId: string) => {
+    setExpenses((currentExpenses) =>
+      currentExpenses.filter((expense) => expense.id !== expenseId),
+    );
+    enqueueSyncOperations([createExpenseDeleteOperation(expenseId)]);
+  };
+
+  const saveDailyClosing = (closing: DailyClosing) => {
+    setDailyClosings((currentClosings) => {
+      const existingClosing = currentClosings.some(
+        (currentClosing) => currentClosing.closingDate === closing.closingDate,
+      );
+
+      if (existingClosing) {
+        return currentClosings.map((currentClosing) =>
+          currentClosing.closingDate === closing.closingDate
+            ? closing
+            : currentClosing,
+        );
+      }
+
+      return [closing, ...currentClosings];
+    });
+    enqueueSyncOperations([createDailyClosingSyncOperation(closing)]);
+  };
+
+  const saveGoogleSheetSettings = (settings: GoogleSheetSyncSettings) => {
+    setGoogleSheetSyncSettings(settings);
+    enqueueSyncOperations([createGoogleSheetSettingsSyncOperation(settings)]);
+  };
+
+  const addGoogleSheetSyncLog = (log: GoogleSheetSyncLog) => {
+    setGoogleSheetSyncLogs((currentLogs) => [log, ...currentLogs].slice(0, 50));
+    enqueueSyncOperations([createGoogleSheetSyncLogOperation(log)]);
+  };
+
   const importAppData = (data: AppStateData) => {
     setMenuItems(data.menuItems);
     setPendingOrders(data.pendingOrders);
     setCompletedTransactions(data.completedTransactions);
     setLegacySales(data.legacySales);
     setLegacyImportBatches(data.legacyImportBatches);
+    setExpenses(data.expenses);
+    setDailyClosings(data.dailyClosings);
+    setGoogleSheetSyncSettings(data.googleSheetSyncSettings);
+    setGoogleSheetSyncLogs(data.googleSheetSyncLogs);
     setReceiptCounter(data.receiptCounter);
     setCart([]);
     setIsCheckoutOpen(false);
@@ -739,8 +831,26 @@ function App() {
 
         {activeTab === 'reports' && canAccessTab('reports', effectiveRole) && (
           <Reports
+            currentUserName={authProfile?.fullName ?? CASHIER_NAME}
+            dailyClosings={dailyClosings}
+            expenses={expenses}
+            googleSheetSyncLogs={googleSheetSyncLogs}
+            googleSheetSyncSettings={googleSheetSyncSettings}
             legacySales={legacySales}
+            onAddGoogleSheetSyncLog={addGoogleSheetSyncLog}
+            onSaveClosing={saveDailyClosing}
+            onSaveGoogleSheetSettings={saveGoogleSheetSettings}
             transactions={completedTransactions}
+          />
+        )}
+
+        {activeTab === 'expenses' && canAccessTab('expenses', effectiveRole) && (
+          <Expenses
+            currentUserName={authProfile?.fullName ?? CASHIER_NAME}
+            expenses={expenses}
+            onAddExpense={addExpense}
+            onDeleteExpense={deleteExpense}
+            onUpdateExpense={updateExpense}
           />
         )}
 
@@ -1281,6 +1391,7 @@ function getActiveTabLabel(tab: AppTab) {
     menu: 'Kelola Menu',
     receipts: 'Riwayat Struk',
     reports: 'Laporan',
+    expenses: 'Pengeluaran',
     legacy: 'Import Data Lama',
   };
 
