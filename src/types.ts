@@ -51,3 +51,10 @@ export type PendingOrder = {
   items: CartItem[];
   createdAt: string;
 };
+
+export type AppStateData = {
+  menuItems: MenuItem[];
+  pendingOrders: PendingOrder[];
+  completedTransactions: CompletedTransaction[];
+  receiptCounter: number;
+};

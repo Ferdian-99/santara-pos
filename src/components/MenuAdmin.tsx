@@ -1,11 +1,16 @@
 import { useState } from 'react';
-import type { MenuItem } from '../types';
+import { LocalDataPanel } from './LocalDataPanel';
+import type { AppStateData, MenuItem } from '../types';
 import { formatRupiah } from '../utils/format';
 
 type MenuAdminProps = {
   items: MenuItem[];
   categories: string[];
+  appData: AppStateData;
+  defaultMenuItems: MenuItem[];
   onAddItem: (item: Omit<MenuItem, 'id'>) => void;
+  onImportData: (data: AppStateData) => void;
+  onResetData: () => void;
   onUpdateItem: (id: string, updates: Partial<Omit<MenuItem, 'id'>>) => void;
   onToggleItem: (id: string) => void;
 };
@@ -21,7 +26,11 @@ const emptyItem = {
 export function MenuAdmin({
   items,
   categories,
+  appData,
+  defaultMenuItems,
   onAddItem,
+  onImportData,
+  onResetData,
   onUpdateItem,
   onToggleItem,
 }: MenuAdminProps) {
@@ -87,6 +96,13 @@ export function MenuAdmin({
           Tambah Menu
         </button>
       </form>
+
+      <LocalDataPanel
+        appData={appData}
+        defaultMenuItems={defaultMenuItems}
+        onImportData={onImportData}
+        onResetData={onResetData}
+      />
 
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
         <div className="space-y-3">

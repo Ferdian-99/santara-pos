@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CheckoutModal } from './components/CheckoutModal';
 import { ConfirmOrderModal, SaveOrderModal } from './components/HoldOrderModals';
 import { MenuAdmin } from './components/MenuAdmin';
@@ -6,6 +6,7 @@ import { ReceiptHistory } from './components/ReceiptHistory';
 import { ReceiptPreview } from './components/ReceiptPreview';
 import { menuCategories as initialMenuCategories } from './data/menu';
 import type {
+  AppStateData,
   CartItem,
   CompletedTransaction,
   MenuItem,
@@ -16,8 +17,14 @@ import {
   formatRupiah,
   formatShortTime,
 } from './utils/format';
+import {
+  createDefaultAppState,
+  loadAppState,
+  saveAppState,
+} from './utils/storage';
 
 const CASHIER_NAME = 'Santara Cashier';
+const defaultMenuItems = initialMenuCategories.flatMap((category) => category.items);
 
 type AppTab = 'cashier' | 'menu' | 'receipts';
 
@@ -32,18 +39,20 @@ function createReceiptNumber(date: Date, sequence: number) {
 
 function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('cashier');
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(() =>
-    initialMenuCategories.flatMap((category) => category.items),
-  );
+  const [initialAppData] = useState(() => loadAppState(defaultMenuItems));
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(initialAppData.menuItems);
   const [activeCategoryName, setActiveCategoryName] = useState(
-    initialMenuCategories[0].name,
+    initialAppData.menuItems[0]?.category ?? initialMenuCategories[0].name,
   );
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [completedTransactions, setCompletedTransactions] = useState<
     CompletedTransaction[]
-  >([]);
-  const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+  >(initialAppData.completedTransactions);
+  const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>(
+    initialAppData.pendingOrders,
+  );
+  const [receiptCounter, setReceiptCounter] = useState(initialAppData.receiptCounter);
   const [isSaveOrderOpen, setIsSaveOrderOpen] = useState(false);
   const [pendingOrderAction, setPendingOrderAction] =
     useState<PendingOrderAction | null>(null);
@@ -64,6 +73,19 @@ function App() {
     () => pendingOrders.reduce((total, order) => total + getCartQuantity(order.items), 0),
     [pendingOrders],
   );
+  const appData = useMemo<AppStateData>(
+    () => ({
+      menuItems,
+      pendingOrders,
+      completedTransactions,
+      receiptCounter,
+    }),
+    [completedTransactions, menuItems, pendingOrders, receiptCounter],
+  );
+
+  useEffect(() => {
+    saveAppState(appData);
+  }, [appData]);
 
   const addMenuItem = (item: Omit<MenuItem, 'id'>) => {
     const id = `${item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`;
@@ -199,11 +221,9 @@ function App() {
     >,
   ) => {
     const completedAt = new Date();
+    const nextReceiptCounter = receiptCounter + 1;
     const transaction: CompletedTransaction = {
-      receiptNumber: createReceiptNumber(
-        completedAt,
-        completedTransactions.length + 1,
-      ),
+      receiptNumber: createReceiptNumber(completedAt, nextReceiptCounter),
       dateTime: completedAt.toISOString(),
       cashierName: CASHIER_NAME,
       items: cart.map((item) => ({
@@ -216,8 +236,27 @@ function App() {
     };
 
     setCompletedTransactions((transactions) => [...transactions, transaction]);
+    setReceiptCounter(nextReceiptCounter);
     setCart([]);
     setIsCheckoutOpen(false);
+  };
+
+  const importAppData = (data: AppStateData) => {
+    setMenuItems(data.menuItems);
+    setPendingOrders(data.pendingOrders);
+    setCompletedTransactions(data.completedTransactions);
+    setReceiptCounter(data.receiptCounter);
+    setCart([]);
+    setIsCheckoutOpen(false);
+    setIsSaveOrderOpen(false);
+    setPendingOrderAction(null);
+    setActiveCategoryName(data.menuItems[0]?.category ?? initialMenuCategories[0].name);
+  };
+
+  const resetLocalData = () => {
+    const defaultState = createDefaultAppState(defaultMenuItems);
+
+    importAppData(defaultState);
   };
 
   return (
@@ -299,9 +338,13 @@ function App() {
 
         {activeTab === 'menu' && (
           <MenuAdmin
+            appData={appData}
             categories={categoryNames}
+            defaultMenuItems={defaultMenuItems}
             items={menuItems}
             onAddItem={addMenuItem}
+            onImportData={importAppData}
+            onResetData={resetLocalData}
             onToggleItem={toggleMenuItem}
             onUpdateItem={updateMenuItem}
           />
