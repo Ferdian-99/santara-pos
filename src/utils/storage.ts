@@ -3,6 +3,8 @@ import type {
   CartItem,
   CompletedTransaction,
   DiscountType,
+  LegacyImportBatch,
+  LegacySale,
   MenuItem,
   PaymentMethod,
   PendingOrder,
@@ -25,6 +27,8 @@ export function createDefaultAppState(defaultMenuItems: MenuItem[]): AppStateDat
     menuItems: defaultMenuItems.map((item) => ({ ...item })),
     pendingOrders: [],
     completedTransactions: [],
+    legacySales: [],
+    legacyImportBatches: [],
     receiptCounter: 0,
   };
 }
@@ -117,9 +121,20 @@ function normalizeAppState(
   const completedTransactions = normalizeCompletedTransactions(
     value.completedTransactions,
   );
+  const legacySales = normalizeLegacySales(value.legacySales);
+  const legacyImportBatches = normalizeLegacyImportBatches(
+    value.legacyImportBatches,
+  );
   const receiptCounter = normalizeReceiptCounter(value.receiptCounter);
 
-  if (!menuItems || !pendingOrders || !completedTransactions || receiptCounter === null) {
+  if (
+    !menuItems ||
+    !pendingOrders ||
+    !completedTransactions ||
+    !legacySales ||
+    !legacyImportBatches ||
+    receiptCounter === null
+  ) {
     return null;
   }
 
@@ -127,6 +142,8 @@ function normalizeAppState(
     menuItems: menuItems.length > 0 ? menuItems : defaultMenuItems,
     pendingOrders,
     completedTransactions,
+    legacySales,
+    legacyImportBatches,
     receiptCounter,
   };
 }
@@ -240,6 +257,98 @@ function normalizeCompletedTransaction(value: unknown): CompletedTransaction | n
     paymentMethod: value.paymentMethod,
     paidAmount: toNullableNonNegativeNumber(value.paidAmount),
     changeAmount: toNullableNonNegativeNumber(value.changeAmount),
+  };
+}
+
+function normalizeLegacySales(value: unknown): LegacySale[] | null {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const sales = value.map(normalizeLegacySale);
+
+  return sales.every(Boolean) ? (sales as LegacySale[]) : null;
+}
+
+function normalizeLegacySale(value: unknown): LegacySale | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    !isString(value.id) ||
+    !isString(value.batchId) ||
+    !isString(value.saleDate) ||
+    !isString(value.menuName)
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    batchId: value.batchId,
+    saleDate: value.saleDate,
+    menuName: value.menuName,
+    category: isString(value.category) && value.category ? value.category : 'Legacy',
+    quantity: Math.max(1, Math.floor(toNonNegativeNumber(value.quantity))),
+    grossSales: toNonNegativeNumber(value.grossSales),
+    discountAmount: toNonNegativeNumber(value.discountAmount),
+    netSales: toNonNegativeNumber(value.netSales),
+    hppTotal: toNonNegativeNumber(value.hppTotal),
+    paymentMethod:
+      isString(value.paymentMethod) && value.paymentMethod
+        ? value.paymentMethod
+        : 'Legacy',
+    notes: isString(value.notes) ? value.notes : '',
+    source: 'legacy_import',
+    importedAt: isString(value.importedAt) ? value.importedAt : value.saleDate,
+    importedBy: isString(value.importedBy) ? value.importedBy : 'Santara User',
+  };
+}
+
+function normalizeLegacyImportBatches(value: unknown): LegacyImportBatch[] | null {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const batches = value.map(normalizeLegacyImportBatch);
+
+  return batches.every(Boolean) ? (batches as LegacyImportBatch[]) : null;
+}
+
+function normalizeLegacyImportBatch(value: unknown): LegacyImportBatch | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    !isString(value.id) ||
+    !isString(value.fileName) ||
+    !isString(value.importedAt)
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    fileName: value.fileName,
+    importedAt: value.importedAt,
+    importedBy: isString(value.importedBy) ? value.importedBy : 'Santara User',
+    totalRows: Math.max(0, Math.floor(toNonNegativeNumber(value.totalRows))),
+    dateStart: isString(value.dateStart) ? value.dateStart : '',
+    dateEnd: isString(value.dateEnd) ? value.dateEnd : '',
+    totalGrossSales: toNonNegativeNumber(value.totalGrossSales),
+    totalDiscount: toNonNegativeNumber(value.totalDiscount),
+    totalNetSales: toNonNegativeNumber(value.totalNetSales),
+    totalHpp: toNonNegativeNumber(value.totalHpp),
   };
 }
 

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { CompletedTransaction } from '../types';
+import type { CompletedTransaction, LegacySale } from '../types';
 import { formatRupiah } from '../utils/format';
 import { exportReportCsv, exportReportJson } from '../utils/reportExport';
 import {
@@ -11,6 +11,7 @@ import {
 
 type ReportsProps = {
   transactions: CompletedTransaction[];
+  legacySales: LegacySale[];
 };
 
 const reportModes: { label: string; value: ReportMode }[] = [
@@ -20,12 +21,12 @@ const reportModes: { label: string; value: ReportMode }[] = [
   { label: 'Semua Waktu', value: 'all' },
 ];
 
-export function Reports({ transactions }: ReportsProps) {
+export function Reports({ legacySales, transactions }: ReportsProps) {
   const [reportMode, setReportMode] = useState<ReportMode>('today');
   const [selectedDate, setSelectedDate] = useState(getTodayInputValue);
   const report = useMemo(
-    () => buildSalesReport(transactions, reportMode, selectedDate),
-    [reportMode, selectedDate, transactions],
+    () => buildSalesReport(transactions, reportMode, selectedDate, legacySales),
+    [legacySales, reportMode, selectedDate, transactions],
   );
   const hasTransactions = report.totalTransactions > 0;
   const exportContext = {
@@ -45,7 +46,10 @@ export function Reports({ transactions }: ReportsProps) {
             Laporan Penjualan Lokal
           </h2>
           <p className="mt-1 text-sm text-santara-roast/65">
-            Ringkasan dari riwayat struk lokal yang tersimpan di browser ini.
+            Ringkasan gabungan dari transaksi POS dan data import lama.
+          </p>
+          <p className="mt-2 w-fit rounded-full bg-white px-3 py-1 text-xs font-black text-santara-bean ring-1 ring-santara-latte">
+            Termasuk data import lama
           </p>
         </div>
 
@@ -133,7 +137,7 @@ export function Reports({ transactions }: ReportsProps) {
               />
               <ReportCard
                 label="Total Transaksi"
-                value={`${report.totalTransactions} struk`}
+                value={`${report.totalTransactions} data`}
               />
               <ReportCard
                 label="Rata-rata Transaksi"
@@ -153,6 +157,19 @@ export function Reports({ transactions }: ReportsProps) {
                         value={formatRupiah(summary.total)}
                       />
                     ))}
+                  </div>
+                </Panel>
+
+                <Panel title="Sumber Data">
+                  <div className="space-y-2">
+                    <SummaryLine
+                      label="Transaksi POS"
+                      value={`${report.sourceTransactionCount} struk`}
+                    />
+                    <SummaryLine
+                      label="Import lama"
+                      value={`${report.sourceLegacyCount} baris`}
+                    />
                   </div>
                 </Panel>
 
@@ -368,8 +385,8 @@ function EmptyReportState() {
           Belum ada data transaksi
         </p>
         <p className="mt-2 max-w-md text-sm font-medium text-santara-roast/65">
-          Selesaikan transaksi di tab Kasir, lalu laporan penjualan lokal akan
-          muncul otomatis di sini.
+          Selesaikan transaksi di tab Kasir atau import data lama, lalu laporan
+          penjualan akan muncul otomatis di sini.
         </p>
       </div>
     </div>

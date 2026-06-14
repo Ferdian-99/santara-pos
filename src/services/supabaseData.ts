@@ -3,6 +3,8 @@ import type {
   AppStateData,
   CompletedTransaction,
   DiscountType,
+  LegacyImportBatch,
+  LegacySale,
   MenuItem,
   PaymentMethod,
   PendingOrder,
@@ -47,6 +49,11 @@ export async function pushSyncOperation(operation: SyncOperation) {
 
   if (operation.type === 'app-settings-upsert' && 'receiptCounter' in payload) {
     await upsertReceiptCounter(payload.receiptCounter);
+    return;
+  }
+
+  if (operation.type === 'legacy-import-upsert' && 'batch' in payload) {
+    await upsertLegacyImport(payload.batch, payload.sales);
   }
 }
 
@@ -57,18 +64,27 @@ export async function pullCloudAppState(
     return null;
   }
 
-  const [menuItems, completedTransactions, pendingOrders, receiptCounter] =
+  const [
+    menuItems,
+    completedTransactions,
+    pendingOrders,
+    receiptCounter,
+    legacyData,
+  ] =
     await Promise.all([
       fetchMenuItems(),
       fetchTransactions(),
       fetchPendingOrders(),
       fetchReceiptCounter(),
+      fetchLegacyImports(),
     ]);
 
   const hasCloudData =
     menuItems.length > 0 ||
     completedTransactions.length > 0 ||
     pendingOrders.length > 0 ||
+    legacyData.sales.length > 0 ||
+    legacyData.batches.length > 0 ||
     receiptCounter !== null;
 
   if (!hasCloudData) {
@@ -85,6 +101,14 @@ export async function pullCloudAppState(
       completedTransactions.length > 0
         ? mergeTransactions(currentData.completedTransactions, completedTransactions)
         : currentData.completedTransactions,
+    legacySales:
+      legacyData.sales.length > 0
+        ? mergeLegacySales(currentData.legacySales, legacyData.sales)
+        : currentData.legacySales,
+    legacyImportBatches:
+      legacyData.batches.length > 0
+        ? mergeLegacyBatches(currentData.legacyImportBatches, legacyData.batches)
+        : currentData.legacyImportBatches,
     receiptCounter: Math.max(
       currentData.receiptCounter,
       receiptCounter ?? 0,
@@ -249,6 +273,64 @@ async function upsertReceiptCounter(receiptCounter: number) {
   throwIfError(error, 'Gagal menyinkronkan nomor struk.');
 }
 
+async function upsertLegacyImport(
+  batch: LegacyImportBatch,
+  sales: LegacySale[],
+) {
+  if (!supabase) {
+    return;
+  }
+
+  const batchId = stableUuid('legacy-import-batch', batch.id);
+  const { error: batchError } = await supabase
+    .from('legacy_import_batches')
+    .upsert(
+      {
+        id: batchId,
+        local_id: batch.id,
+        file_name: batch.fileName,
+        imported_at: batch.importedAt,
+        imported_by_name: batch.importedBy,
+        total_rows: batch.totalRows,
+        date_start: batch.dateStart || null,
+        date_end: batch.dateEnd || null,
+        total_gross_sales: batch.totalGrossSales,
+        total_discount: batch.totalDiscount,
+        total_net_sales: batch.totalNetSales,
+        total_hpp: batch.totalHpp,
+      },
+      { onConflict: 'id' },
+    );
+
+  throwIfError(batchError, 'Gagal menyinkronkan batch import lama.');
+
+  const rows = sales.map((sale) => ({
+    id: stableUuid('legacy-sale', sale.id),
+    local_id: sale.id,
+    import_batch_id: batchId,
+    sale_date: sale.saleDate,
+    menu_name: sale.menuName,
+    category_name: sale.category,
+    quantity: sale.quantity,
+    gross_sales: sale.grossSales,
+    discount_amount: sale.discountAmount,
+    net_sales: sale.netSales,
+    hpp_total: sale.hppTotal,
+    payment_method: sale.paymentMethod || 'Legacy',
+    notes: sale.notes,
+    source: 'legacy_import',
+    imported_by_name: sale.importedBy,
+    imported_at: sale.importedAt,
+  }));
+
+  if (rows.length > 0) {
+    const { error: salesError } = await supabase
+      .from('legacy_sales')
+      .upsert(rows, { onConflict: 'id' });
+    throwIfError(salesError, 'Gagal menyinkronkan data import lama.');
+  }
+}
+
 async function fetchMenuItems(): Promise<MenuItem[]> {
   if (!supabase) {
     return [];
@@ -351,6 +433,63 @@ async function fetchReceiptCounter() {
   return toNumberValue(data.value.receiptCounter);
 }
 
+async function fetchLegacyImports(): Promise<{
+  batches: LegacyImportBatch[];
+  sales: LegacySale[];
+}> {
+  if (!supabase) {
+    return { batches: [], sales: [] };
+  }
+
+  const [{ data: batchData, error: batchError }, { data: salesData, error: salesError }] =
+    await Promise.all([
+      supabase
+        .from('legacy_import_batches')
+        .select('*')
+        .order('imported_at', { ascending: false }),
+      supabase
+        .from('legacy_sales')
+        .select('*')
+        .order('sale_date', { ascending: true }),
+    ]);
+
+  throwIfError(batchError, 'Gagal mengambil riwayat import lama.');
+  throwIfError(salesError, 'Gagal mengambil data import lama.');
+
+  return {
+    batches: (batchData ?? []).map((row: DbRow) => ({
+      id: toStringValue(row.local_id) || toStringValue(row.id),
+      fileName: toStringValue(row.file_name),
+      importedAt: toStringValue(row.imported_at),
+      importedBy: toStringValue(row.imported_by_name) || 'Santara User',
+      totalRows: toNumberValue(row.total_rows),
+      dateStart: toStringValue(row.date_start),
+      dateEnd: toStringValue(row.date_end),
+      totalGrossSales: toNumberValue(row.total_gross_sales),
+      totalDiscount: toNumberValue(row.total_discount),
+      totalNetSales: toNumberValue(row.total_net_sales),
+      totalHpp: toNumberValue(row.total_hpp),
+    })),
+    sales: (salesData ?? []).map((row: DbRow) => ({
+      id: toStringValue(row.local_id) || toStringValue(row.id),
+      batchId: toStringValue(row.import_batch_id),
+      saleDate: toStringValue(row.sale_date),
+      menuName: toStringValue(row.menu_name),
+      category: toStringValue(row.category_name) || 'Legacy',
+      quantity: Math.max(1, toNumberValue(row.quantity)),
+      grossSales: toNumberValue(row.gross_sales),
+      discountAmount: toNumberValue(row.discount_amount),
+      netSales: toNumberValue(row.net_sales),
+      hppTotal: toNumberValue(row.hpp_total),
+      paymentMethod: toStringValue(row.payment_method) || 'Legacy',
+      notes: toStringValue(row.notes),
+      source: 'legacy_import',
+      importedAt: toStringValue(row.imported_at),
+      importedBy: toStringValue(row.imported_by_name) || 'Santara User',
+    })),
+  };
+}
+
 function mapTransactionItem(row: DbRow): TransactionItem {
   return {
     id: toStringValue(row.menu_item_id || row.id),
@@ -379,6 +518,33 @@ function mergeTransactions(
   return Array.from(transactionMap.values()).sort(
     (first, second) =>
       new Date(first.dateTime).getTime() - new Date(second.dateTime).getTime(),
+  );
+}
+
+function mergeLegacySales(localSales: LegacySale[], cloudSales: LegacySale[]) {
+  const salesMap = new Map<string, LegacySale>();
+
+  localSales.forEach((sale) => salesMap.set(sale.id, sale));
+  cloudSales.forEach((sale) => salesMap.set(sale.id, sale));
+
+  return Array.from(salesMap.values()).sort(
+    (first, second) =>
+      new Date(first.saleDate).getTime() - new Date(second.saleDate).getTime(),
+  );
+}
+
+function mergeLegacyBatches(
+  localBatches: LegacyImportBatch[],
+  cloudBatches: LegacyImportBatch[],
+) {
+  const batchMap = new Map<string, LegacyImportBatch>();
+
+  localBatches.forEach((batch) => batchMap.set(batch.id, batch));
+  cloudBatches.forEach((batch) => batchMap.set(batch.id, batch));
+
+  return Array.from(batchMap.values()).sort(
+    (first, second) =>
+      new Date(second.importedAt).getTime() - new Date(first.importedAt).getTime(),
   );
 }
 

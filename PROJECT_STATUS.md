@@ -36,6 +36,10 @@ The app currently has:
 * Riwayat Struk
 * Receipt detail
 * Receipt reprint
+* Import Data Lama
+* CSV legacy sales import
+* Legacy import preview and batch history
+* Legacy sales included in reports and CSV/JSON report export
 * Branch mismatch was fixed, latest work is on `main`
 
 ## Important Current Limitation
@@ -43,7 +47,6 @@ The app currently has:
 * Data is still localStorage-first and browser-local, so it is not ready as a multi-device production database.
 * Supabase autosync exists, but localStorage remains the first safety layer while cloud setup is tested.
 * There is no Google Sheets sync yet.
-* There is no legacy import yet.
 
 ## Phase 5A Supabase Preparation
 
@@ -61,7 +64,8 @@ What is still not implemented:
 * The app has not replaced localStorage persistence yet.
 * Phase 5B added autosync after this planning phase.
 * Phase 5C added login/auth and safer role policies after this planning phase.
-* No Google Sheets sync, legacy import, expenses, shift closing, or Excel export exists yet.
+* Phase 6 added legacy import after this planning phase.
+* No Google Sheets sync, expenses, shift closing, or Excel export exists yet.
 
 ## Phase 5B Supabase Autosync
 
@@ -79,7 +83,8 @@ What is still not implemented:
 * Phase 5C added login/auth UI after this autosync phase.
 * Phase 5C replaced the temporary anon policies with authenticated role policies.
 * No complex conflict resolution exists yet.
-* No Google Sheets sync, legacy import, expenses, shift closing, realtime subscriptions, or Excel export exists yet.
+* Phase 6 added legacy import after this autosync phase.
+* No Google Sheets sync, expenses, shift closing, realtime subscriptions, or Excel export exists yet.
 
 ## Phase 5C Supabase Auth and Role Policies
 
@@ -97,20 +102,43 @@ What exists:
 What is still not implemented:
 
 * No complex user management UI exists yet.
-* No Google Sheets sync, legacy import, expenses, shift closing, realtime subscriptions, or Excel export exists yet.
+* Phase 6 added legacy import after this auth phase.
+* No Google Sheets sync, expenses, shift closing, realtime subscriptions, or Excel export exists yet.
+
+## Phase 6 Legacy Sales Import
+
+What exists:
+
+* Owner/admin can access `Import Data Lama`.
+* Cashier cannot access the legacy import tab.
+* CSV import supports flexible columns for date/tanggal, menu/nama menu, category/kategori, qty/jumlah, gross sales/penjualan kotor, discount/diskon, net sales/penjualan bersih, HPP/COGS, payment method/metode pembayaran, and notes/catatan.
+* Import preview shows total rows, gross sales, discount, net sales, HPP, and row warnings before saving.
+* Import batch history stores file name, import time, total rows, date range, and total net sales.
+* Duplicate-like imports show a custom confirmation modal.
+* Legacy sales persist in localStorage and are queued for Supabase autosync.
+* `supabase/migrations/20260614000400_santara_pos_legacy_sales.sql` adds `legacy_import_batches` and `legacy_sales`.
+* Reports include POS transactions plus legacy imported sales by default.
+* Report CSV/JSON exports include legacy imported sales.
+* Legacy sales do not appear as normal receipt history.
+
+What is still not implemented:
+
+* No XLSX import exists yet.
+* No Google Sheets sync exists yet.
+* No expenses, shift closing, realtime subscriptions, or complex accounting exists yet.
 
 ## Next Recommended Phase
 
 The next phase should be:
 
-Phase 5D - Supabase Auth/Sync Deployment Testing
+Phase 6B - Legacy Import Real CSV Testing
 
 Goal:
 
-* Test the deployed Vercel app against the real Supabase project.
-* Confirm owner/admin/cashier access in production.
-* Confirm autosync after checkout, menu edit, and pending order changes.
-* Fix only setup or integration issues found during real testing.
+* Test the import screen with a real CSV from the old POS.
+* Adjust column aliases only if the old POS uses unexpected headings.
+* Confirm imported rows appear correctly in Hari Ini, Pilih Tanggal, Bulan Ini, and Semua Waktu reports.
+* Confirm Supabase sync stores legacy import batches and legacy sales.
 
 ## Future Roadmap
 

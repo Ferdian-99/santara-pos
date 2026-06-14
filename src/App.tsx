@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckoutModal } from './components/CheckoutModal';
 import { ConfirmOrderModal, SaveOrderModal } from './components/HoldOrderModals';
+import { LegacyImport } from './components/LegacyImport';
 import { LoginScreen } from './components/LoginScreen';
 import { MenuAdmin } from './components/MenuAdmin';
 import { ReceiptHistory } from './components/ReceiptHistory';
@@ -24,6 +25,7 @@ import {
 } from './services/supabaseData';
 import {
   addSyncOperation,
+  createLegacyImportSyncOperation,
   createMenuSyncOperation,
   createPendingOrderDeleteOperation,
   createPendingOrderUpsertOperation,
@@ -40,6 +42,8 @@ import type {
   AppStateData,
   CartItem,
   CompletedTransaction,
+  LegacyImportBatch,
+  LegacySale,
   MenuItem,
   PendingOrder,
 } from './types';
@@ -57,7 +61,7 @@ import {
 const CASHIER_NAME = 'Santara Cashier';
 const defaultMenuItems = initialMenuCategories.flatMap((category) => category.items);
 
-type AppTab = 'cashier' | 'menu' | 'receipts' | 'reports';
+type AppTab = 'cashier' | 'menu' | 'receipts' | 'reports' | 'legacy';
 type AuthStatus = 'loading' | 'local' | 'authenticated' | 'unauthenticated';
 
 type PendingOrderAction = {
@@ -78,6 +82,7 @@ const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: 'menu', label: 'Kelola Menu' },
   { id: 'receipts', label: 'Riwayat Struk' },
   { id: 'reports', label: 'Laporan' },
+  { id: 'legacy', label: 'Import Data Lama' },
 ];
 
 function createReceiptNumber(date: Date, sequence: number) {
@@ -96,6 +101,12 @@ function App() {
   const [completedTransactions, setCompletedTransactions] = useState<
     CompletedTransaction[]
   >(initialAppData.completedTransactions);
+  const [legacySales, setLegacySales] = useState<LegacySale[]>(
+    initialAppData.legacySales,
+  );
+  const [legacyImportBatches, setLegacyImportBatches] = useState<
+    LegacyImportBatch[]
+  >(initialAppData.legacyImportBatches);
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>(
     initialAppData.pendingOrders,
   );
@@ -143,9 +154,18 @@ function App() {
       menuItems,
       pendingOrders,
       completedTransactions,
+      legacySales,
+      legacyImportBatches,
       receiptCounter,
     }),
-    [completedTransactions, menuItems, pendingOrders, receiptCounter],
+    [
+      completedTransactions,
+      legacyImportBatches,
+      legacySales,
+      menuItems,
+      pendingOrders,
+      receiptCounter,
+    ],
   );
   const appDataRef = useRef(appData);
   const syncQueueRef = useRef(syncQueue);
@@ -252,6 +272,8 @@ function App() {
     setMenuItems(data.menuItems);
     setPendingOrders(data.pendingOrders);
     setCompletedTransactions(data.completedTransactions);
+    setLegacySales(data.legacySales);
+    setLegacyImportBatches(data.legacyImportBatches);
     setReceiptCounter(data.receiptCounter);
     setActiveCategoryName(data.menuItems[0]?.category ?? initialMenuCategories[0].name);
     saveAppState(data);
@@ -574,10 +596,18 @@ function App() {
     setIsCheckoutOpen(false);
   };
 
+  const importLegacySales = (batch: LegacyImportBatch, sales: LegacySale[]) => {
+    setLegacyImportBatches((batches) => [batch, ...batches]);
+    setLegacySales((currentSales) => [...currentSales, ...sales]);
+    enqueueSyncOperations([createLegacyImportSyncOperation(batch, sales)]);
+  };
+
   const importAppData = (data: AppStateData) => {
     setMenuItems(data.menuItems);
     setPendingOrders(data.pendingOrders);
     setCompletedTransactions(data.completedTransactions);
+    setLegacySales(data.legacySales);
+    setLegacyImportBatches(data.legacyImportBatches);
     setReceiptCounter(data.receiptCounter);
     setCart([]);
     setIsCheckoutOpen(false);
@@ -708,7 +738,18 @@ function App() {
         )}
 
         {activeTab === 'reports' && canAccessTab('reports', effectiveRole) && (
-          <Reports transactions={completedTransactions} />
+          <Reports
+            legacySales={legacySales}
+            transactions={completedTransactions}
+          />
+        )}
+
+        {activeTab === 'legacy' && canAccessTab('legacy', effectiveRole) && (
+          <LegacyImport
+            batches={legacyImportBatches}
+            importedBy={authProfile?.fullName ?? CASHIER_NAME}
+            onSaveImport={importLegacySales}
+          />
         )}
       </div>
 
@@ -1240,6 +1281,7 @@ function getActiveTabLabel(tab: AppTab) {
     menu: 'Kelola Menu',
     receipts: 'Riwayat Struk',
     reports: 'Laporan',
+    legacy: 'Import Data Lama',
   };
 
   return labels[tab];

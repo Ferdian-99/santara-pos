@@ -29,6 +29,7 @@ export function exportReportCsv(context: ExportContext) {
     ['Report mode', metadata.reportMode],
     ...(metadata.selectedDate ? [['Selected date', metadata.selectedDate]] : []),
     ['Generated at', metadata.generatedAt],
+    ['Includes legacy import', context.report.hasLegacyData ? 'Yes' : 'No'],
     [],
     ['Summary'],
     ['Metric', 'Value'],
@@ -40,6 +41,8 @@ export function exportReportCsv(context: ExportContext) {
     ['Gross Margin', formatPercentValue(context.report.grossMargin)],
     ['Total Transaksi', context.report.totalTransactions],
     ['Average Transaction Value', context.report.averageTransactionValue],
+    ['POS transaction count', context.report.sourceTransactionCount],
+    ['Legacy import row count', context.report.sourceLegacyCount],
     [],
     ['Payment Summary'],
     ['Payment Method', 'Transaction Count', 'Total'],
@@ -128,7 +131,9 @@ export function exportReportJson(context: ExportContext) {
       quantity: item.quantity,
       netSales: item.netSales,
     })),
-    sourceTransactionCount: context.report.transactions.length,
+    sourceTransactionCount: context.report.sourceTransactionCount,
+    sourceLegacyCount: context.report.sourceLegacyCount,
+    includesLegacyImport: context.report.hasLegacyData,
   };
 
   downloadTextFile(

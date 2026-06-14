@@ -27,6 +27,7 @@ export type TransactionItem = CartItem & {
 };
 
 export type PaymentMethod = 'Cash' | 'QRIS' | 'Debit';
+export type ReportPaymentMethod = PaymentMethod | 'Legacy' | string;
 
 export type DiscountType = 'none' | 'fixed' | 'percentage';
 
@@ -52,9 +53,43 @@ export type PendingOrder = {
   createdAt: string;
 };
 
+export type LegacySale = {
+  id: string;
+  batchId: string;
+  saleDate: string;
+  menuName: string;
+  category: string;
+  quantity: number;
+  grossSales: number;
+  discountAmount: number;
+  netSales: number;
+  hppTotal: number;
+  paymentMethod: ReportPaymentMethod;
+  notes: string;
+  source: 'legacy_import';
+  importedAt: string;
+  importedBy: string;
+};
+
+export type LegacyImportBatch = {
+  id: string;
+  fileName: string;
+  importedAt: string;
+  importedBy: string;
+  totalRows: number;
+  dateStart: string;
+  dateEnd: string;
+  totalGrossSales: number;
+  totalDiscount: number;
+  totalNetSales: number;
+  totalHpp: number;
+};
+
 export type AppStateData = {
   menuItems: MenuItem[];
   pendingOrders: PendingOrder[];
   completedTransactions: CompletedTransaction[];
+  legacySales: LegacySale[];
+  legacyImportBatches: LegacyImportBatch[];
   receiptCounter: number;
 };

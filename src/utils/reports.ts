@@ -1,9 +1,13 @@
-import type { CompletedTransaction, PaymentMethod } from '../types';
+import type {
+  CompletedTransaction,
+  LegacySale,
+  ReportPaymentMethod,
+} from '../types';
 
 export type ReportMode = 'today' | 'date' | 'month' | 'all';
 
 export type PaymentSummary = {
-  method: PaymentMethod;
+  method: ReportPaymentMethod;
   transactionCount: number;
   total: number;
 };
@@ -23,6 +27,7 @@ export type MenuSalesSummary = {
 
 export type SalesReport = {
   transactions: CompletedTransaction[];
+  legacySales: LegacySale[];
   grossSales: number;
   totalDiscount: number;
   netSales: number;
@@ -36,38 +41,50 @@ export type SalesReport = {
   bestSellers: MenuSalesSummary[];
   discountedTransactionCount: number;
   averageDiscount: number;
+  hasLegacyData: boolean;
+  sourceTransactionCount: number;
+  sourceLegacyCount: number;
 };
 
-const paymentMethods: PaymentMethod[] = ['Cash', 'QRIS', 'Debit'];
+const paymentMethods: ReportPaymentMethod[] = ['Cash', 'QRIS', 'Debit', 'Legacy'];
 
 export function buildSalesReport(
   transactions: CompletedTransaction[],
   mode: ReportMode,
   selectedDate: string,
+  legacySales: LegacySale[] = [],
 ): SalesReport {
   const filteredTransactions = filterTransactions(transactions, mode, selectedDate);
+  const filteredLegacySales = filterLegacySales(legacySales, mode, selectedDate);
+  const transactionRecords = filteredTransactions.map(mapTransactionToReportRecord);
+  const legacyRecords = filteredLegacySales.map(mapLegacySaleToReportRecord);
+  const reportRecords = [...transactionRecords, ...legacyRecords];
   const grossSales = filteredTransactions.reduce(
     (total, transaction) => total + transaction.subtotalBeforeDiscount,
     0,
-  );
+  ) + filteredLegacySales.reduce((total, sale) => total + sale.grossSales, 0);
   const totalDiscount = filteredTransactions.reduce(
     (total, transaction) => total + transaction.discountAmount,
     0,
-  );
+  ) + filteredLegacySales.reduce((total, sale) => total + sale.discountAmount, 0);
   const netSales = Math.max(grossSales - totalDiscount, 0);
   const totalHpp = filteredTransactions.reduce(
     (total, transaction) => total + getTransactionHpp(transaction),
     0,
-  );
+  ) + filteredLegacySales.reduce((total, sale) => total + sale.hppTotal, 0);
   const grossProfit = netSales - totalHpp;
   const grossMargin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
-  const totalTransactions = filteredTransactions.length;
+  const totalTransactions = reportRecords.length;
   const discountedTransactions = filteredTransactions.filter(
     (transaction) => transaction.discountAmount > 0,
+  );
+  const discountedLegacySales = filteredLegacySales.filter(
+    (sale) => sale.discountAmount > 0,
   );
 
   return {
     transactions: filteredTransactions,
+    legacySales: filteredLegacySales,
     grossSales,
     totalDiscount,
     netSales,
@@ -77,16 +94,21 @@ export function buildSalesReport(
     totalTransactions,
     averageTransactionValue:
       totalTransactions > 0 ? netSales / totalTransactions : 0,
-    paymentSummary: buildPaymentSummary(filteredTransactions),
-    menuSales: buildMenuSales(filteredTransactions),
-    bestSellers: buildMenuSales(filteredTransactions)
+    paymentSummary: buildPaymentSummary(reportRecords),
+    menuSales: buildMenuSales(reportRecords),
+    bestSellers: buildMenuSales(reportRecords)
       .sort((first, second) => second.quantity - first.quantity)
       .slice(0, 5),
-    discountedTransactionCount: discountedTransactions.length,
+    discountedTransactionCount:
+      discountedTransactions.length + discountedLegacySales.length,
     averageDiscount:
-      discountedTransactions.length > 0
-        ? totalDiscount / discountedTransactions.length
+      discountedTransactions.length + discountedLegacySales.length > 0
+        ? totalDiscount /
+          (discountedTransactions.length + discountedLegacySales.length)
         : 0,
+    hasLegacyData: filteredLegacySales.length > 0,
+    sourceTransactionCount: filteredTransactions.length,
+    sourceLegacyCount: filteredLegacySales.length,
   };
 }
 
@@ -127,52 +149,109 @@ function filterTransactions(
   });
 }
 
-function buildPaymentSummary(transactions: CompletedTransaction[]): PaymentSummary[] {
-  return paymentMethods.map((method) => {
-    const matchingTransactions = transactions.filter(
-      (transaction) => transaction.paymentMethod === method,
-    );
+function filterLegacySales(
+  legacySales: LegacySale[],
+  mode: ReportMode,
+  selectedDate: string,
+) {
+  if (mode === 'all') {
+    return legacySales;
+  }
 
-    return {
-      method,
-      transactionCount: matchingTransactions.length,
-      total: matchingTransactions.reduce(
-        (sum, transaction) =>
-          sum +
-          Math.max(
-            transaction.subtotalBeforeDiscount - transaction.discountAmount,
-            0,
-          ),
-        0,
-      ),
-    };
+  const now = new Date();
+
+  return legacySales.filter((sale) => {
+    const saleDate = new Date(sale.saleDate);
+
+    if (Number.isNaN(saleDate.getTime())) {
+      return false;
+    }
+
+    if (mode === 'today') {
+      return toInputDate(saleDate) === toInputDate(now);
+    }
+
+    if (mode === 'date') {
+      return toInputDate(saleDate) === selectedDate;
+    }
+
+    return (
+      saleDate.getFullYear() === now.getFullYear() &&
+      saleDate.getMonth() === now.getMonth()
+    );
   });
 }
 
-function buildMenuSales(transactions: CompletedTransaction[]): MenuSalesSummary[] {
+type ReportRecord = {
+  dateTime: string;
+  paymentMethod: ReportPaymentMethod;
+  grossSales: number;
+  discountAmount: number;
+  netSales: number;
+  hpp: number;
+  items: Array<{
+    key: string;
+    name: string;
+    category: string;
+    quantity: number;
+    grossSales: number;
+    discountAmount: number;
+    netSales: number;
+    hpp: number;
+  }>;
+};
+
+function buildPaymentSummary(records: ReportRecord[]): PaymentSummary[] {
+  const methods = Array.from(
+    new Set([...paymentMethods, ...records.map((record) => record.paymentMethod)]),
+  );
+
+  return paymentMethods.map((method) => {
+    const matchingRecords = records.filter((record) => record.paymentMethod === method);
+
+    return {
+      method,
+      transactionCount: matchingRecords.length,
+      total: matchingRecords.reduce((sum, record) => sum + record.netSales, 0),
+    };
+  }).concat(
+    methods
+      .filter((method) => !paymentMethods.includes(method))
+      .map((method) => {
+        const matchingRecords = records.filter(
+          (record) => record.paymentMethod === method,
+        );
+
+        return {
+          method,
+          transactionCount: matchingRecords.length,
+          total: matchingRecords.reduce((sum, record) => sum + record.netSales, 0),
+        };
+      }),
+  );
+}
+
+function buildMenuSales(records: ReportRecord[]): MenuSalesSummary[] {
   const menuMap = new Map<string, MenuSalesSummary>();
 
-  transactions.forEach((transaction) => {
-    transaction.items.forEach((item) => {
-      const grossSales = item.subtotal;
-      const hpp = (item.hppSnapshot ?? 0) * item.quantity;
-      const discountAllocation = getDiscountAllocation(transaction, grossSales);
-      const netSales = Math.max(grossSales - discountAllocation, 0);
-      const estimatedProfit = netSales - hpp;
-      const margin = netSales > 0 ? (estimatedProfit / netSales) * 100 : 0;
-      const key = `${item.nameSnapshot}|${item.categorySnapshot}`;
+  records.forEach((record) => {
+    record.items.forEach((item) => {
+      const estimatedProfit = item.netSales - item.hpp;
+      const margin =
+        item.netSales > 0 ? (estimatedProfit / item.netSales) * 100 : 0;
+      const key = item.key;
       const current = menuMap.get(key);
 
       if (!current) {
         menuMap.set(key, {
           key,
-          name: item.nameSnapshot,
-          category: item.categorySnapshot,
+          name: item.name,
+          category: item.category,
           quantity: item.quantity,
-          grossSales,
-          discountAmount: discountAllocation,
-          netSales,
-          hpp,
+          grossSales: item.grossSales,
+          discountAmount: item.discountAmount,
+          netSales: item.netSales,
+          hpp: item.hpp,
           estimatedProfit,
           margin,
         });
@@ -180,10 +259,10 @@ function buildMenuSales(transactions: CompletedTransaction[]): MenuSalesSummary[
       }
 
       current.quantity += item.quantity;
-      current.grossSales += grossSales;
-      current.discountAmount += discountAllocation;
-      current.netSales += netSales;
-      current.hpp += hpp;
+      current.grossSales += item.grossSales;
+      current.discountAmount += item.discountAmount;
+      current.netSales += item.netSales;
+      current.hpp += item.hpp;
       current.estimatedProfit += estimatedProfit;
       current.margin =
         current.netSales > 0
@@ -196,6 +275,62 @@ function buildMenuSales(transactions: CompletedTransaction[]): MenuSalesSummary[
     (first, second) =>
       second.quantity - first.quantity || second.netSales - first.netSales,
   );
+}
+
+function mapTransactionToReportRecord(transaction: CompletedTransaction): ReportRecord {
+  const netSales = Math.max(
+    transaction.subtotalBeforeDiscount - transaction.discountAmount,
+    0,
+  );
+
+  return {
+    dateTime: transaction.dateTime,
+    paymentMethod: transaction.paymentMethod,
+    grossSales: transaction.subtotalBeforeDiscount,
+    discountAmount: transaction.discountAmount,
+    netSales,
+    hpp: getTransactionHpp(transaction),
+    items: transaction.items.map((item) => {
+      const grossSales = item.subtotal;
+      const discountAmount = getDiscountAllocation(transaction, grossSales);
+      const itemNetSales = Math.max(grossSales - discountAmount, 0);
+      const hpp = (item.hppSnapshot ?? 0) * item.quantity;
+
+      return {
+        key: `${item.nameSnapshot}|${item.categorySnapshot}`,
+        name: item.nameSnapshot,
+        category: item.categorySnapshot,
+        quantity: item.quantity,
+        grossSales,
+        discountAmount,
+        netSales: itemNetSales,
+        hpp,
+      };
+    }),
+  };
+}
+
+function mapLegacySaleToReportRecord(sale: LegacySale): ReportRecord {
+  return {
+    dateTime: sale.saleDate,
+    paymentMethod: sale.paymentMethod || 'Legacy',
+    grossSales: sale.grossSales,
+    discountAmount: sale.discountAmount,
+    netSales: sale.netSales,
+    hpp: sale.hppTotal,
+    items: [
+      {
+        key: `${sale.menuName}|${sale.category}`,
+        name: sale.menuName,
+        category: sale.category,
+        quantity: sale.quantity,
+        grossSales: sale.grossSales,
+        discountAmount: sale.discountAmount,
+        netSales: sale.netSales,
+        hpp: sale.hppTotal,
+      },
+    ],
+  };
 }
 
 function getTransactionHpp(transaction: CompletedTransaction) {

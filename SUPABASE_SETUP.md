@@ -48,9 +48,13 @@ Open Supabase SQL Editor and run these files in order:
 1. `supabase/migrations/20260614000100_santara_pos_schema.sql`
 2. `supabase/migrations/20260614000200_santara_pos_phase5b_sync_policies.sql`
 3. `supabase/migrations/20260614000300_santara_pos_auth_policies.sql`
+4. `supabase/migrations/20260614000400_santara_pos_legacy_sales.sql`
 
 The Phase 5C migration removes the temporary anon sync policies and replaces
 them with authenticated owner/admin/cashier policies.
+
+The Phase 6 migration adds legacy import tables so old POS sales can be included
+in local and cloud-backed reports.
 
 ## 6. Create a Supabase Auth User
 
@@ -102,12 +106,19 @@ If a logged-in user has no profile row yet, the app safely treats them as
 
 - No complex user management UI exists yet.
 - No Google Sheets sync exists yet.
-- No legacy import exists yet.
 - No expenses or shift closing exists yet.
 - No realtime subscriptions exist yet.
 
-## 10. Next Phase
+## 10. Legacy Import Notes
 
-The next Supabase phase should be Phase 5D: test deployed Supabase auth/sync,
-polish any real-world setup issues, and only then consider broader cloud data
-management.
+- Owner/admin can open `Import Data Lama`.
+- Cashier cannot see the legacy import tab.
+- Legacy sales are included in `Laporan`.
+- Legacy sales do not appear in `Riwayat Struk`.
+- If Supabase sync fails, imported data remains in localStorage and the sync
+  queue retries later.
+
+## 11. Next Phase
+
+The next phase should not be Google Sheets until legacy import is tested with a
+real CSV from the old POS.

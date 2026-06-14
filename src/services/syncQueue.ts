@@ -1,11 +1,18 @@
-import type { CompletedTransaction, MenuItem, PendingOrder } from '../types';
+import type {
+  CompletedTransaction,
+  LegacyImportBatch,
+  LegacySale,
+  MenuItem,
+  PendingOrder,
+} from '../types';
 
 export type SyncOperationType =
   | 'menu-snapshot-upsert'
   | 'transaction-upsert'
   | 'pending-order-upsert'
   | 'pending-order-delete'
-  | 'app-settings-upsert';
+  | 'app-settings-upsert'
+  | 'legacy-import-upsert';
 
 export type SyncOperation = {
   id: string;
@@ -17,7 +24,8 @@ export type SyncOperation = {
     | { transaction: CompletedTransaction }
     | { pendingOrder: PendingOrder }
     | { pendingOrderId: string }
-    | { receiptCounter: number };
+    | { receiptCounter: number }
+    | { batch: LegacyImportBatch; sales: LegacySale[] };
 };
 
 export type SyncMeta = {
@@ -185,6 +193,20 @@ export function createPendingOrderDeleteOperation(
     dedupeKey: `pending-order:${pendingOrderId}`,
     payload: {
       pendingOrderId,
+    },
+  };
+}
+
+export function createLegacyImportSyncOperation(
+  batch: LegacyImportBatch,
+  sales: LegacySale[],
+): Omit<SyncOperation, 'id' | 'createdAt'> {
+  return {
+    type: 'legacy-import-upsert',
+    dedupeKey: `legacy-import:${batch.id}`,
+    payload: {
+      batch,
+      sales,
     },
   };
 }
