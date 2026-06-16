@@ -27,8 +27,12 @@ export type MenuSalesSummary = {
   grossSales: number;
   discountAmount: number;
   netSales: number;
+  unitHpp: number;
+  totalHpp: number;
   hpp: number;
   estimatedProfit: number;
+  profit: number;
+  marginRatio: number;
   margin: number;
 };
 
@@ -275,6 +279,8 @@ type ReportRecord = {
     grossSales: number;
     discountAmount: number;
     netSales: number;
+    unitHpp: number;
+    totalHpp: number;
     hpp: number;
   }>;
 };
@@ -329,9 +335,16 @@ function buildMenuSales(records: ReportRecord[]): MenuSalesSummary[] {
 
   records.forEach((record) => {
     record.items.forEach((item) => {
-      const estimatedProfit = item.netSales - item.hpp;
-      const margin =
-        item.netSales > 0 ? (estimatedProfit / item.netSales) * 100 : 0;
+      const totalHpp = safeNumber(item.totalHpp || item.hpp);
+      const unitHpp =
+        item.unitHpp > 0
+          ? safeNumber(item.unitHpp)
+          : item.quantity > 0
+            ? totalHpp / item.quantity
+            : 0;
+      const profit = item.netSales - totalHpp;
+      const marginRatio = item.netSales > 0 ? profit / item.netSales : 0;
+      const margin = marginRatio * 100;
       const key = item.key;
       const current = menuMap.get(key);
 
@@ -344,8 +357,12 @@ function buildMenuSales(records: ReportRecord[]): MenuSalesSummary[] {
           grossSales: item.grossSales,
           discountAmount: item.discountAmount,
           netSales: item.netSales,
-          hpp: item.hpp,
-          estimatedProfit,
+          unitHpp,
+          totalHpp,
+          hpp: totalHpp,
+          estimatedProfit: profit,
+          profit,
+          marginRatio,
           margin,
         });
         return;
@@ -355,12 +372,15 @@ function buildMenuSales(records: ReportRecord[]): MenuSalesSummary[] {
       current.grossSales += item.grossSales;
       current.discountAmount += item.discountAmount;
       current.netSales += item.netSales;
-      current.hpp += item.hpp;
-      current.estimatedProfit += estimatedProfit;
-      current.margin =
-        current.netSales > 0
-          ? (current.estimatedProfit / current.netSales) * 100
-          : 0;
+      current.totalHpp += totalHpp;
+      current.hpp = current.totalHpp;
+      current.unitHpp =
+        current.quantity > 0 ? current.totalHpp / current.quantity : 0;
+      current.estimatedProfit += profit;
+      current.profit = current.estimatedProfit;
+      current.marginRatio =
+        current.netSales > 0 ? current.estimatedProfit / current.netSales : 0;
+      current.margin = current.marginRatio * 100;
     });
   });
 
@@ -387,7 +407,8 @@ function mapTransactionToReportRecord(transaction: CompletedTransaction): Report
       const grossSales = item.subtotal;
       const discountAmount = getDiscountAllocation(transaction, grossSales);
       const itemNetSales = Math.max(grossSales - discountAmount, 0);
-      const hpp = (item.hppSnapshot ?? 0) * item.quantity;
+      const unitHpp = safeNumber(item.hppSnapshot ?? 0);
+      const totalHpp = unitHpp * item.quantity;
 
       return {
         key: `${item.nameSnapshot}|${item.categorySnapshot}`,
@@ -397,7 +418,9 @@ function mapTransactionToReportRecord(transaction: CompletedTransaction): Report
         grossSales,
         discountAmount,
         netSales: itemNetSales,
-        hpp,
+        unitHpp,
+        totalHpp,
+        hpp: totalHpp,
       };
     }),
   };
@@ -420,6 +443,8 @@ function mapLegacySaleToReportRecord(sale: LegacySale): ReportRecord {
         grossSales: sale.grossSales,
         discountAmount: sale.discountAmount,
         netSales: sale.netSales,
+        unitHpp: sale.quantity > 0 ? sale.hppTotal / sale.quantity : 0,
+        totalHpp: sale.hppTotal,
         hpp: sale.hppTotal,
       },
     ],
@@ -428,9 +453,13 @@ function mapLegacySaleToReportRecord(sale: LegacySale): ReportRecord {
 
 function getTransactionHpp(transaction: CompletedTransaction) {
   return transaction.items.reduce(
-    (total, item) => total + (item.hppSnapshot ?? 0) * item.quantity,
+    (total, item) => total + safeNumber(item.hppSnapshot ?? 0) * item.quantity,
     0,
   );
+}
+
+function safeNumber(value: number) {
+  return Number.isFinite(value) ? value : 0;
 }
 
 function getDiscountAllocation(

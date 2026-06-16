@@ -183,10 +183,16 @@ function toMenuSalesExportItem(item: SalesReport['menuSales'][number]) {
   const grossSales = safeNumber(item.grossSales);
   const discountAmount = safeNumber(item.discountAmount);
   const netSales = safeNumber(item.netSales);
-  const totalHpp = safeNumber(item.hpp);
+  const totalHpp = safeNumber(item.totalHpp || item.hpp);
   const profit = netSales - totalHpp;
-  const unitHpp = quantity > 0 ? totalHpp / quantity : 0;
-  const margin = netSales > 0 ? (profit / netSales) * 100 : 0;
+  const unitHpp =
+    item.unitHpp > 0
+      ? safeNumber(item.unitHpp)
+      : quantity > 0
+        ? totalHpp / quantity
+        : 0;
+  const marginRatio = netSales > 0 ? profit / netSales : 0;
+  const margin = marginRatio * 100;
 
   return {
     ...item,
@@ -200,6 +206,8 @@ function toMenuSalesExportItem(item: SalesReport['menuSales'][number]) {
     quantity,
     totalHpp,
     unitHpp,
+    marginRatio,
+    marginPercent: margin,
   };
 }
 

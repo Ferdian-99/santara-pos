@@ -157,10 +157,15 @@ function toGoogleSheetMenuSalePayload(item: SalesReport['menuSales'][number]) {
   const grossSales = safeNumber(item.grossSales);
   const discountAmount = safeNumber(item.discountAmount);
   const netSales = safeNumber(item.netSales);
-  const totalHpp = safeNumber(item.hpp);
+  const totalHpp = safeNumber(item.totalHpp || item.hpp);
   const profit = netSales - totalHpp;
   const unitPrice = quantity > 0 ? grossSales / quantity : 0;
-  const unitHpp = quantity > 0 ? totalHpp / quantity : 0;
+  const unitHpp =
+    item.unitHpp > 0
+      ? safeNumber(item.unitHpp)
+      : quantity > 0
+        ? totalHpp / quantity
+        : 0;
   const margin = netSales > 0 ? profit / netSales : 0;
 
   return {
