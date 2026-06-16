@@ -11,10 +11,9 @@ type LocalDataPanelProps = {
   defaultMenuItems: MenuItem[];
   onImportData: (data: AppStateData) => void;
   onResetData: () => void;
-  onResetOperationalData: () => void;
 };
 
-type ConfirmAction = 'import' | 'reset' | 'reset-operational';
+type ConfirmAction = 'import' | 'reset';
 type StatusType = 'success' | 'error' | null;
 
 export function LocalDataPanel({
@@ -22,14 +21,12 @@ export function LocalDataPanel({
   defaultMenuItems,
   onImportData,
   onResetData,
-  onResetOperationalData,
 }: LocalDataPanelProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingImport, setPendingImport] = useState<AppStateData | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [statusType, setStatusType] = useState<StatusType>(null);
   const [statusMessage, setStatusMessage] = useState('');
-  const [resetConfirmText, setResetConfirmText] = useState('');
 
   const showStatus = (type: Exclude<StatusType, null>, message: string) => {
     setStatusType(type);
@@ -75,19 +72,11 @@ export function LocalDataPanel({
       setConfirmAction(null);
       showStatus('success', 'Data berhasil dimuat');
     }
-
-    if (confirmAction === 'reset-operational') {
-      onResetOperationalData();
-      setConfirmAction(null);
-      setResetConfirmText('');
-      showStatus('success', 'Data operasional testing berhasil direset');
-    }
   };
 
   const cancelCurrentAction = () => {
     setConfirmAction(null);
     setPendingImport(null);
-    setResetConfirmText('');
   };
 
   return (
@@ -106,7 +95,7 @@ export function LocalDataPanel({
           </p>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[430px]">
+        <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[520px]">
           <button
             className="rounded-lg bg-santara-bean px-4 py-3 text-sm font-black text-white transition hover:bg-santara-roast"
             onClick={() => {
@@ -123,13 +112,6 @@ export function LocalDataPanel({
             type="button"
           >
             Import Backup
-          </button>
-          <button
-            className="rounded-lg bg-white px-4 py-3 text-sm font-black text-santara-clay ring-1 ring-santara-latte transition hover:bg-santara-cream"
-            onClick={() => setConfirmAction('reset-operational')}
-            type="button"
-          >
-            Reset Data Operasional Testing
           </button>
           <button
             className="rounded-lg bg-white px-4 py-3 text-sm font-black text-santara-clay ring-1 ring-santara-latte transition hover:bg-santara-cream"
@@ -164,10 +146,8 @@ export function LocalDataPanel({
       {confirmAction && (
         <LocalDataConfirmModal
           action={confirmAction}
-          resetConfirmText={resetConfirmText}
           onCancel={cancelCurrentAction}
           onConfirm={confirmCurrentAction}
-          onResetConfirmTextChange={setResetConfirmText}
         />
       )}
     </section>
@@ -178,19 +158,14 @@ type LocalDataConfirmModalProps = {
   action: ConfirmAction;
   onCancel: () => void;
   onConfirm: () => void;
-  onResetConfirmTextChange: (value: string) => void;
-  resetConfirmText: string;
 };
 
 function LocalDataConfirmModal({
   action,
   onCancel,
   onConfirm,
-  onResetConfirmTextChange,
-  resetConfirmText,
 }: LocalDataConfirmModalProps) {
   const isReset = action === 'reset';
-  const isOperationalReset = action === 'reset-operational';
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-santara-roast/55 p-4 backdrop-blur-sm">
@@ -199,31 +174,13 @@ function LocalDataConfirmModal({
           Data Lokal
         </p>
         <h2 className="mt-1 text-2xl font-black text-santara-roast">
-          {isOperationalReset
-            ? 'Reset Data Operasional Testing'
-            : isReset
-              ? 'Yakin reset data lokal?'
-              : 'Import Backup'}
+          {isReset ? 'Yakin reset data lokal?' : 'Import Backup'}
         </h2>
         <p className="mt-3 text-sm font-medium leading-relaxed text-santara-roast/70">
-          {isOperationalReset
-            ? 'Ini hanya menghapus data operasional lokal/testing di browser ini. Menu dan kategori tidak akan dihapus. Reset ini tidak otomatis menghapus data di Supabase atau Google Sheet.'
-            : isReset
-              ? 'Tindakan ini akan menghapus menu editan, pending order, dan riwayat struk lokal.'
-              : 'Data backup akan menggantikan menu, pending order, riwayat struk, dan nomor struk lokal saat ini.'}
+          {isReset
+            ? 'Tindakan ini akan menghapus menu editan, pending order, dan riwayat struk lokal.'
+            : 'Data backup akan menggantikan menu, pending order, riwayat struk, dan nomor struk lokal saat ini.'}
         </p>
-        {isOperationalReset && (
-          <label className="mt-4 block">
-            <span className="text-sm font-bold text-santara-roast/70">
-              Ketik RESET untuk lanjut
-            </span>
-            <input
-              className="mt-2 w-full rounded-lg bg-white px-3 py-3 text-sm font-black text-santara-roast outline-none ring-1 ring-santara-latte transition focus:ring-2 focus:ring-santara-clay"
-              onChange={(event) => onResetConfirmTextChange(event.target.value)}
-              value={resetConfirmText}
-            />
-          </label>
-        )}
 
         <div className="mt-5 grid grid-cols-2 gap-3">
           <button
@@ -235,7 +192,6 @@ function LocalDataConfirmModal({
           </button>
           <button
             className="rounded-lg bg-santara-bean px-4 py-3 text-sm font-black text-white shadow-soft transition hover:bg-santara-roast"
-            disabled={isOperationalReset && resetConfirmText !== 'RESET'}
             onClick={onConfirm}
             type="button"
           >

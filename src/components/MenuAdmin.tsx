@@ -12,7 +12,6 @@ type MenuAdminProps = {
   onAddItem: (item: Omit<MenuItem, 'id'>) => void;
   onImportData: (data: AppStateData) => void;
   onResetData: () => void;
-  onResetOperationalData: () => void;
   onRenameCategory: (id: string, name: string) => void;
   onUpdateItem: (id: string, updates: Partial<Omit<MenuItem, 'id'>>) => void;
   onToggleCategory: (id: string) => void;
@@ -36,7 +35,6 @@ export function MenuAdmin({
   onAddItem,
   onImportData,
   onResetData,
-  onResetOperationalData,
   onRenameCategory,
   onToggleCategory,
   onUpdateItem,
@@ -184,7 +182,6 @@ export function MenuAdmin({
         defaultMenuItems={defaultMenuItems}
         onImportData={onImportData}
         onResetData={onResetData}
-        onResetOperationalData={onResetOperationalData}
       />
 
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">

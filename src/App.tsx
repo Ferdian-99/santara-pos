@@ -1012,7 +1012,6 @@ function App() {
             onAddItem={addMenuItem}
             onImportData={importAppData}
             onResetData={resetLocalData}
-            onResetOperationalData={resetOperationalTestingData}
             onRenameCategory={renameMenuCategory}
             onToggleItem={toggleMenuItem}
             onToggleCategory={toggleMenuCategory}
@@ -1042,6 +1041,7 @@ function App() {
             onSaveLegacyImport={importLegacySales}
             onSaveClosing={saveDailyClosing}
             onSaveGoogleSheetSettings={saveGoogleSheetSettings}
+            onResetOperationalData={resetOperationalTestingData}
             transactions={completedTransactions}
           />
         )}
