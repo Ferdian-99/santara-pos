@@ -37,8 +37,247 @@ button {
 .receipt-paper {
   width: 58mm;
   max-width: 100%;
-  padding: 4mm;
+  padding: 5mm 4mm;
   font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.receipt-header {
+  text-align: center;
+}
+
+.receipt-logo {
+  display: block;
+  width: 33mm;
+  max-width: 86%;
+  height: auto;
+  margin: 0 auto 3mm;
+  filter: grayscale(1) invert(1) contrast(1.55) brightness(0.93);
+  mix-blend-mode: multiply;
+}
+
+.receipt-logo-hidden {
+  display: none;
+}
+
+.receipt-logo-fallback,
+.receipt-brand {
+  font-weight: 900;
+  letter-spacing: 0.28em;
+}
+
+.receipt-logo-fallback {
+  margin: 0 0 3mm;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+}
+
+.receipt-brand {
+  font-size: 13px;
+  line-height: 1.15;
+}
+
+.receipt-slogan {
+  margin-top: 1.3mm;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.receipt-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.2mm;
+  margin: 4mm 0;
+  font-size: 12px;
+}
+
+.receipt-divider::before,
+.receipt-divider::after {
+  content: ".....";
+  letter-spacing: 1.8mm;
+  line-height: 1;
+}
+
+.receipt-divider span {
+  display: inline-grid;
+  width: 5mm;
+  height: 5mm;
+  place-items: center;
+  border-radius: 999px;
+  background: #1d1713;
+}
+
+.receipt-divider span::before {
+  content: "";
+  display: block;
+  width: 1.4mm;
+  height: 3.8mm;
+  border-radius: 999px;
+  border-left: 1px solid #fff;
+  transform: rotate(25deg);
+}
+
+.receipt-divider-wave::before,
+.receipt-divider-wave::after {
+  content: "~~~~~~~~";
+  letter-spacing: 0;
+}
+
+.receipt-badge {
+  width: fit-content;
+  margin: 0 auto 2.5mm;
+  padding: 1mm 2mm;
+  border: 1px solid #1d1713;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.receipt-badge-danger {
+  border-width: 2px;
+}
+
+.receipt-meta,
+.receipt-void-box,
+.receipt-totals,
+.receipt-wifi,
+.receipt-footer {
+  margin-top: 4mm;
+}
+
+.receipt-info-row {
+  display: grid;
+  grid-template-columns: 20mm 3mm minmax(0, 1fr);
+  gap: 1mm;
+  margin-top: 1.8mm;
+}
+
+.receipt-info-row span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.receipt-void-box {
+  padding: 2.5mm;
+  border: 1px solid #1d1713;
+}
+
+.receipt-void-title {
+  margin: 0 0 1.5mm;
+  text-align: center;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.receipt-rule {
+  margin: 4mm 0;
+  border-top: 1px dashed #1d1713;
+}
+
+.receipt-rule-compact {
+  margin: 2.5mm 0;
+}
+
+.receipt-table-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8mm 14mm 15mm;
+  gap: 1mm;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.receipt-table-head span:nth-child(n + 2) {
+  text-align: right;
+}
+
+.receipt-items {
+  display: grid;
+  gap: 0;
+}
+
+.receipt-item {
+  padding: 2.6mm 0;
+  border-bottom: 1px dashed #1d1713;
+}
+
+.receipt-item:last-child {
+  border-bottom: 0;
+}
+
+.receipt-item-name {
+  margin: 0 0 1.2mm;
+  font-weight: 700;
+}
+
+.receipt-item-line {
+  display: grid;
+  grid-template-columns: 8mm 1fr 17mm;
+  gap: 1mm;
+}
+
+.receipt-item-line span:nth-child(n + 2),
+.receipt-discount-line span:last-child {
+  text-align: right;
+}
+
+.receipt-discount-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 17mm;
+  gap: 1mm;
+  margin-top: 1mm;
+  padding-left: 3mm;
+}
+
+.receipt-amount-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 3mm;
+  margin-top: 1.7mm;
+}
+
+.receipt-amount-row span:first-child {
+  min-width: 0;
+}
+
+.receipt-amount-row span:last-child {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.receipt-total-line {
+  margin: 3mm 0 2mm;
+  border-top: 2px solid #1d1713;
+}
+
+.receipt-amount-row-strong {
+  align-items: baseline;
+  margin-top: 0;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.receipt-wifi {
+  padding: 2.5mm 0;
+  text-align: center;
+  font-weight: 700;
+}
+
+.receipt-footer {
+  text-align: center;
+}
+
+.receipt-footer p {
+  margin: 1mm 0 0;
+}
+
+.receipt-footer-dots {
+  margin-top: 3mm !important;
+  font-weight: 900;
+  letter-spacing: 2mm;
 }
 
 @media print {
@@ -49,6 +288,8 @@ button {
 
   body {
     background: #fff;
+    color: #000;
+    margin: 0;
   }
 
   body * {
@@ -68,11 +309,25 @@ button {
     padding: 0;
     border: 0;
     box-shadow: none;
+    background: #fff;
+    color: #000;
   }
 
   .receipt-paper {
     width: 58mm;
     max-width: 58mm;
     padding: 4mm;
+    color: #000;
+    box-shadow: none;
+  }
+
+  .receipt-logo {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .receipt-print-area button,
+  .receipt-print-area [role="button"] {
+    display: none !important;
   }
 }

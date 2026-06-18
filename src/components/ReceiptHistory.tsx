@@ -322,7 +322,7 @@ export function ReceiptHistory({
               </section>
 
               <h4 className="text-sm font-black">Preview Struk</h4>
-              <ReceiptPreview transaction={selectedTransaction} />
+              <ReceiptPreview isReprint transaction={selectedTransaction} />
             </div>
           ) : (
             <div className="grid h-full min-h-72 place-items-center rounded-lg border border-dashed border-santara-latte bg-santara-cream/70 p-5 text-center">
